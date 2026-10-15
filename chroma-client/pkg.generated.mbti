@@ -1,0 +1,175 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "SundayT1998/chroma-client"
+
+import {
+  "SundayT1998/chroma-client/internal/http",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn debug_collection_config(CollectionConfig) -> Json
+
+pub fn embedding_from_json(Json) -> Array[Double] raise ChromaError
+
+pub fn embedding_to_json(Array[Double]) -> Json
+
+pub fn json_response(Int, String, headers? : Map[String, String]) -> @http.Response
+
+pub fn memory_transport(responses? : Array[@http.Response]) -> @http.MemoryTransport
+
+pub fn metadata_from_json(Json) -> Array[(String, MetadataValue)]
+
+pub fn metadata_to_json(Array[(String, MetadataValue)]) -> Json
+
+// Errors
+pub(all) suberror ChromaError {
+  Transport(String)
+  Status(Int, String)
+  Decode(String)
+}
+pub fn ChromaError::equal(Self, Self) -> Bool
+pub fn ChromaError::not_equal(Self, Self) -> Bool
+pub fn ChromaError::output(Self, &Logger) -> Unit
+pub fn ChromaError::to_string(Self) -> String
+
+// Types and methods
+pub(all) struct ChromaClient[T] {
+  transport : T
+  config : Config
+}
+pub fn[T : @http.Transport] ChromaClient::add(Self[T], String, Array[Record]) -> Unit raise ChromaError
+pub fn[T] ChromaClient::config(Self[T]) -> Config
+pub fn[T : @http.Transport] ChromaClient::count_collections(Self[T]) -> Int raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::create_collection(Self[T], String, config? : CollectionConfig) -> Collection raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::delete(Self[T], String, filter? : Filter) -> Unit raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::delete_collection(Self[T], String) -> Unit raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::get(Self[T], String, filter? : Filter) -> QueryResult raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::get_collection(Self[T], String) -> Collection? raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::get_or_create_collection(Self[T], String, config? : CollectionConfig) -> Collection raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::heartbeat(Self[T]) -> Int raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::list_collections(Self[T]) -> Array[Collection] raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::modify_collection(Self[T], String, new_name? : String?, metadata? : Array[(String, MetadataValue)]?) -> Unit raise ChromaError
+pub fn[T] ChromaClient::new(T, config? : Config) -> Self[T]
+pub fn[T : @http.Transport] ChromaClient::query_embeddings(Self[T], String, Array[Array[Double]], n_results? : Int, include_fields? : Include) -> QueryResult raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::query_text(Self[T], String, Array[String], n_results? : Int, include_fields? : Include) -> QueryResult raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::update(Self[T], String, Array[Record], filter? : Filter) -> Unit raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::upsert(Self[T], String, Array[Record]) -> Unit raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::version(Self[T]) -> String raise ChromaError
+
+pub(all) struct Collection {
+  id : String
+  name : String
+  metadata : Array[(String, MetadataValue)]
+  configuration : Json
+  log_position : Int
+  version : Int
+} derive(Eq, @debug.Debug)
+pub fn Collection::equal(Self, Self) -> Bool
+pub fn Collection::from_json(Json) -> Self raise ChromaError
+pub fn Collection::not_equal(Self, Self) -> Bool
+pub fn Collection::to_repr(Self) -> @debug.Repr
+
+pub(all) struct CollectionConfig {
+  metadata : Array[(String, MetadataValue)]
+  embedding_function : String?
+  configuration : Json?
+} derive(Eq, @debug.Debug)
+pub fn CollectionConfig::equal(Self, Self) -> Bool
+pub fn CollectionConfig::new(metadata? : Array[(String, MetadataValue)], embedding_function? : String?, configuration? : Json?) -> Self
+pub fn CollectionConfig::not_equal(Self, Self) -> Bool
+pub fn CollectionConfig::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Config {
+  endpoint : String
+  tenant : String
+  database : String
+  headers : Map[String, String]
+  timeout_ms : Int
+} derive(Eq, @debug.Debug)
+pub fn Config::equal(Self, Self) -> Bool
+pub fn Config::new(endpoint? : String, tenant? : String, database? : String, headers? : Map[String, String], timeout_ms? : Int) -> Self
+pub fn Config::not_equal(Self, Self) -> Bool
+pub fn Config::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Filter {
+  where_clause : Json?
+  where_document_clause : Json?
+  ids : Array[String]
+  limit : Int?
+  offset : Int?
+} derive(Eq, @debug.Debug)
+pub fn Filter::equal(Self, Self) -> Bool
+pub fn Filter::new(where_clause? : Json?, where_document_clause? : Json?, ids? : Array[String], limit? : Int?, offset? : Int?) -> Self
+pub fn Filter::not_equal(Self, Self) -> Bool
+pub fn Filter::to_repr(Self) -> @debug.Repr
+pub fn Filter::with_limit(Self, Int) -> Self
+pub fn Filter::with_metadata(Self, String, MetadataValue) -> Self
+
+pub(all) struct Include {
+  documents : Bool
+  embeddings : Bool
+  metadatas : Bool
+  distances : Bool
+} derive(Eq, @debug.Debug)
+pub fn Include::all() -> Self
+pub fn Include::default() -> Self
+pub fn Include::equal(Self, Self) -> Bool
+pub fn Include::ids_only() -> Self
+pub fn Include::not_equal(Self, Self) -> Bool
+pub fn Include::to_repr(Self) -> @debug.Repr
+
+pub(all) enum MetadataValue {
+  MString(String)
+  MInt(Int)
+  MFloat(Double)
+  MBool(Bool)
+  MNull
+} derive(Eq, @debug.Debug)
+pub fn MetadataValue::equal(Self, Self) -> Bool
+pub fn MetadataValue::from_json(Json) -> Self?
+pub fn MetadataValue::not_equal(Self, Self) -> Bool
+pub fn MetadataValue::to_json(Self) -> Json
+pub fn MetadataValue::to_repr(Self) -> @debug.Repr
+
+pub(all) struct QueryResult {
+  ids : Array[String]
+  documents : Array[String?]
+  embeddings : Array[Array[Double]?]
+  metadatas : Array[Array[(String, MetadataValue)]]
+  distances : Array[Double?]
+} derive(Eq, @debug.Debug)
+pub fn QueryResult::equal(Self, Self) -> Bool
+pub fn QueryResult::from_json(Json) -> Self
+pub fn QueryResult::from_query_json(Json) -> Self
+pub fn QueryResult::not_equal(Self, Self) -> Bool
+pub fn QueryResult::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Record {
+  id : String
+  document : String?
+  embedding : Array[Double]?
+  metadata : Array[(String, MetadataValue)]
+} derive(Eq, @debug.Debug)
+pub fn Record::equal(Self, Self) -> Bool
+pub fn Record::not_equal(Self, Self) -> Bool
+pub fn Record::of_document(String, String, metadata? : Array[(String, MetadataValue)]) -> Self
+pub fn Record::of_embedding(String, Array[Double], metadata? : Array[(String, MetadataValue)]) -> Self
+pub fn Record::to_json(Self) -> Json
+pub fn Record::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+pub type Embedding = Array[Double]
+
+pub using @http {type MemoryTransport}
+
+pub type Metadata = Array[(String, MetadataValue)]
+
+pub using @http {type Method}
+
+pub using @http {type Request}
+
+pub using @http {type Response}
+
+pub using @http {trait Transport}
+
+// Traits

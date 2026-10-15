@@ -1,0 +1,6 @@
+import {
+  "moonbitlang/core/env",
+  "SundayT1998/chroma-client" @chroma,
+}
+
+pkgtype(kind: "executable")

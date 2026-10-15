@@ -1,0 +1,38 @@
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: macos-latest
+          - os: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MoonBit
+        uses: moonbitlang/setup-moonbit@main
+
+      - name: Check formatting
+        run: moon fmt --check
+
+      - name: Type-check all targets
+        run: moon check --target all
+
+      - name: Run tests
+        run: moon test --target all
+
+      - name: Verify generated interfaces are up to date
+        run: |
+          moon info
+          git diff --exit-code -- '*.mbti'
+        shell: bash

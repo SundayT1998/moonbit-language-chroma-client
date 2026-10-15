@@ -1,0 +1,18 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "SundayT1998/chroma-client/cmd/main"
+
+import {
+  "SundayT1998/chroma-client/internal/http",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+type DemoTransport
+pub fn DemoTransport::send(Self, @http.Request) -> @http.Response raise
+
+// Type aliases
+
+// Traits
