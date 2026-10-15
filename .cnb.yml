@@ -1,0 +1,35 @@
+# CNB pipeline: keeps the same checks as GitHub Actions by delegating to
+# scripts/ci.sh, so both platforms run one shared definition.
+.pipeline: &pipeline
+  runner:
+    tags: cnb:arch:amd64
+  docker:
+    build:
+      # Bake the MoonBit toolchain into the pipeline image, so the build
+      # environment is preinstalled and `moon update` only hits the registry.
+      dockerfile: .cnb/Dockerfile
+      by:
+        - .cnb/Dockerfile
+        - scripts/ci.sh
+        - scripts/install-moonbit.sh
+      versionBy:
+        - .cnb/Dockerfile
+    volumes:
+      - /root/.moon
+      - /root/.cache/moon:copy-on-write
+  stages:
+    - name: ci
+      script: sh scripts/ci.sh
+
+main:
+  push:
+    - <<: *pipeline
+      name: push
+  pull_request:
+    - <<: *pipeline
+      name: pull-request
+
+"**":
+  push:
+    - <<: *pipeline
+      name: push-branch

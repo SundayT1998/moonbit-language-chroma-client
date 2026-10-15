@@ -30,12 +30,13 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up MoonBit
-        run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+        run: sh scripts/install-moonbit.sh
+        shell: bash
 
       - name: Update MoonBit dependencies
         run: |
-            moon version --all
-            moon update
-            
+          export PATH="$HOME/.moon/bin:$PATH"
+          moon version --all
+          moon update
+        shell: bash
+
