@@ -12,7 +12,7 @@
 # unset, which is the case here.
 #
 # Usage: sh scripts/ci.sh [step ...]
-#   steps: update fmt check info test coverage build
+#   steps: update fmt check info test coverage gate build
 #   (default: every step, in order)
 set -eu
 
@@ -21,7 +21,7 @@ cd "${ROOT_DIR}"
 
 TARGET="native"
 
-ALL_STEPS="update fmt check info test coverage build"
+ALL_STEPS="update fmt check info test coverage gate build"
 if [ "$#" -gt 0 ]; then
   STEPS="$*"
 else
@@ -78,7 +78,14 @@ if has_step coverage; then
   log "moon coverage analyze"
   moon coverage analyze
   log "moon coverage report -f cobertura"
+  # The cobertura report is what the gate below parses, and it doubles as the
+  # artifact a reviewer can open when the summary is not enough.
   moon coverage report -f cobertura
+fi
+
+if has_step gate; then
+  log "sh scripts/coverage_gate.sh"
+  sh scripts/coverage_gate.sh
 fi
 
 if has_step build; then
@@ -88,7 +95,8 @@ if has_step build; then
   moon build --target "${TARGET}" --release
 fi
 
-# Keep the worktree clean for whoever runs this script locally.
+# Keep the worktree clean for whoever runs this script locally. The gate runs
+# before this, so the report exists for exactly as long as it is needed.
 rm -f cobertura.xml
 
 log "CI passed"
