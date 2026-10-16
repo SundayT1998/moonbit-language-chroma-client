@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "SundayT1998/chroma-client/internal/http"
+package "SundayT1998/chroma-client/http"
 
 import {
   "moonbitlang/core/debug",

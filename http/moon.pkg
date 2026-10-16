@@ -5,5 +5,5 @@ import {
 pkgtype(kind: "library")
 
 import {
-  "SundayT1998/chroma-client/internal/http",
+  "SundayT1998/chroma-client/http",
 } for "test"

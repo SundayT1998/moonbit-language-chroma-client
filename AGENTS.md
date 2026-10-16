@@ -15,6 +15,12 @@ You can browse and install extra skills here:
 - In the toplevel directory, there is a `moon.mod` file listing module
   metadata.
 
+- Package directories are named after what they contain, not after a Go-style
+  visibility convention: a package is `http`, not `internal/http`, and
+  executables live under `cmd/<name>`. Do not introduce `internal/`, `pkg/` or
+  similar Go layouts; MoonBit has no `internal` visibility rule to motivate
+  them.
+
 ## Coding convention
 
 - MoonBit code is organized in block style, each block is separated by `///|`,
