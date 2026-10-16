@@ -365,3 +365,272 @@ fn try_catch(
     error => Err(error)
   }
 }
+
+///|
+test "with_token and with_basic_auth stamp the authorization header" {
+  let base = @chroma-client.Config::new()
+  let bearer = base.with_token("s3cret")
+  assert_eq(bearer.headers.get("authorization"), Some("Bearer s3cret"))
+  // the original config is untouched
+  assert_eq(base.headers.length(), 0)
+
+  let basic = base.with_basic_auth("alice", "hunter2")
+  assert_eq(
+    basic.headers.get("authorization"),
+    Some("Basic YWxpY2U6aHVudGVyMg=="),
+  )
+}
+
+///|
+test "authentication headers reach every request" {
+  let transport = @http.MemoryTransport::new(responses=[
+    @http.Response::json(200, "{\"count\":0}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(
+    transport,
+    config=@chroma-client.Config::new().with_token("t"),
+  )
+  ignore(client.count_collections())
+  assert_eq(
+    transport.last_request().unwrap().headers.get("authorization"),
+    Some("Bearer t"),
+  )
+}
+
+///|
+test "with_headers merges without mutating the receiver" {
+  let base = @chroma-client.Config::new(headers={ "x-base": "1" })
+  let merged = base.with_headers({ "x-extra": "2" })
+  assert_eq(merged.headers.get("x-base"), Some("1"))
+  assert_eq(merged.headers.get("x-extra"), Some("2"))
+  assert_eq(base.headers.get("x-extra"), None)
+}
+
+///|
+test "with_token overrides an earlier Authorization header" {
+  let config = @chroma-client.Config::new(headers={
+    "authorization": "Bearer stale",
+  }).with_token("fresh")
+  assert_eq(config.headers.get("authorization"), Some("Bearer fresh"))
+  assert_eq(config.headers.length(), 1)
+}
+
+///|
+test "timeout transport stamps the deadline header" {
+  let inner = @http.MemoryTransport::new(responses=[
+    @http.Response::json(200, "{\"count\":0}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(
+    @chroma-client.TimeoutTransport::new(inner, 5000),
+  )
+  ignore(client.count_collections())
+  let request = inner.last_request().unwrap()
+  assert_eq(request.headers.get(@chroma-client.TIMEOUT_HEADER), Some("5000"))
+}
+
+///|
+test "timeout transport passes requests through when disabled" {
+  let inner = @http.MemoryTransport::new(responses=[
+    @http.Response::json(200, "{\"count\":0}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(
+    @chroma-client.TimeoutTransport::from_config(
+      inner,
+      @chroma-client.Config::new(timeout_ms=0),
+    ),
+  )
+  ignore(client.count_collections())
+  assert_eq(
+    inner.last_request().unwrap().headers.get(@chroma-client.TIMEOUT_HEADER),
+    None,
+  )
+}
+
+///|
+test "count reads the collection record count" {
+  let transport = @http.MemoryTransport::new(responses=[
+    @http.Response::json(200, "{\"count\": 17}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  assert_eq(client.count("c1"), 17)
+  let request = transport.last_request().unwrap()
+  assert_eq(request.verb, @http.Get)
+  assert_true(request.url.has_suffix("/collections/c1/count"))
+}
+
+///|
+test "peek posts a bounded limit and decodes a flat result" {
+  let transport = @http.MemoryTransport::new(responses=[
+    @http.Response::json(
+      200, "{\"ids\":[\"r1\",\"r2\"],\"documents\":[\"a\",\"b\"]}",
+    ),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  let result = client.peek("c1", limit=2)
+  assert_eq(result.ids, ["r1", "r2"])
+  let body = @json.parse(transport.last_request().unwrap().body.unwrap())
+  assert_eq(
+    body,
+    @json.parse(
+      "{\"limit\":2,\"include\":[\"documents\",\"metadatas\",\"distances\"]}",
+    ),
+  )
+}
+
+///|
+test "peek clamps out-of-range limits" {
+  let transport = @http.MemoryTransport::new(responses=[
+    @http.Response::json(200, "{\"ids\":[]}"),
+    @http.Response::json(200, "{\"ids\":[]}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  ignore(client.peek("c1", limit=0))
+  ignore(client.peek("c1", limit=9999))
+  let observed = transport.observed()
+  let first = @json.parse(observed[0].body.unwrap())
+  let second = @json.parse(observed[1].body.unwrap())
+  assert_eq(
+    first,
+    @json.parse(
+      "{\"limit\":1,\"include\":[\"documents\",\"metadatas\",\"distances\"]}",
+    ),
+  )
+  assert_eq(
+    second,
+    @json.parse(
+      "{\"limit\":100,\"include\":[\"documents\",\"metadatas\",\"distances\"]}",
+    ),
+  )
+}
+
+///|
+test "get rejects an offset that is not smaller than the limit" {
+  let transport = @http.MemoryTransport::new()
+  let client = @chroma-client.ChromaClient::new(transport)
+  let filter = @chroma-client.Filter::new(limit=Some(10), offset=Some(10))
+  let result = try_catch(() => ignore(client.get("c1", filter~)))
+  assert_true(result is Err(InvalidArgument(_)))
+  // nothing was sent
+  assert_eq(transport.observed().length(), 0)
+}
+
+///|
+test "get accepts an offset smaller than the limit" {
+  let transport = @http.MemoryTransport::new(responses=[
+    @http.Response::json(200, "{\"ids\":[\"r1\"]}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  let filter = @chroma-client.Filter::new(limit=Some(10), offset=Some(5))
+  assert_eq(client.get("c1", filter~).ids, ["r1"])
+  let body = @json.parse(transport.last_request().unwrap().body.unwrap())
+  assert_eq(body, @json.parse("{\"limit\":10,\"offset\":5}"))
+}
+
+///|
+test "get tolerates an offset without a limit" {
+  let transport = @http.MemoryTransport::new(responses=[
+    @http.Response::json(200, "{\"ids\":[]}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  let filter = @chroma-client.Filter::new(offset=Some(99))
+  ignore(client.get("c1", filter~))
+  assert_eq(transport.observed().length(), 1)
+}
+
+///|
+test "get reports a missing ids field as a decode error" {
+  let transport = @http.MemoryTransport::new(responses=[
+    @http.Response::json(200, "{\"documents\":[\"a\"]}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  let result = try_catch(() => ignore(client.get("c1")))
+  assert_true(result is Err(Decode(_)))
+}
+
+///|
+test "query rejects a non-positive n_results" {
+  let transport = @http.MemoryTransport::new()
+  let client = @chroma-client.ChromaClient::new(transport)
+  let result = try_catch(() => {
+    ignore(client.query_text("c1", ["x"], n_results=0))
+  })
+  assert_true(result is Err(InvalidArgument(_)))
+  assert_eq(transport.observed().length(), 0)
+}
+
+///|
+test "query forwards where clauses but not the pagination window" {
+  let transport = @http.MemoryTransport::new(responses=[
+    @http.Response::json(200, "{\"ids\":[[\"r1\"]]}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  let filter = @chroma-client.Filter::new(
+    where_clause=Some(@json.parse("{\"tag\":{\"$eq\":\"x\"}}")),
+  )
+  ignore(client.query_text("c1", ["x"], filter~))
+  let body = @json.parse(transport.last_request().unwrap().body.unwrap())
+  assert_eq(
+    body,
+    @json.parse(
+      "{\"query_texts\":[\"x\"],\"n_results\":10,\"include\":[\"documents\",\"metadatas\",\"distances\"],\"where\":{\"tag\":{\"$eq\":\"x\"}}}",
+    ),
+  )
+}
+
+///|
+test "record-level embedding function override is serialized" {
+  let transport = @http.MemoryTransport::new(responses=[
+    @http.Response::json(200, "{}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  let record = @chroma-client.Record::of_document("r1", "hello").with_embedding_function(
+    @json.parse("{\"name\":\"custom\"}"),
+  )
+  client.add("c1", [record])
+  let body = @json.parse(transport.last_request().unwrap().body.unwrap())
+  assert_eq(
+    required_object(required_array(body, "records")[0], "embedding_function"),
+    @json.parse("{\"name\":\"custom\"}"),
+  )
+}
+
+///|
+test "embedding function override requires a document" {
+  let record = @chroma-client.Record::of_embedding("r1", [1.0])
+  let config = @json.parse("{\"name\":\"custom\"}")
+  let result = try_catch(() => ignore(record.with_embedding_function(config)))
+  assert_true(result is Err(InvalidArgument(_)))
+}
+
+///|
+test "records without an override leave the field out" {
+  let transport = @http.MemoryTransport::new(responses=[
+    @http.Response::json(200, "{}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  client.add("c1", [@chroma-client.Record::of_document("r1", "hello")])
+  let body = @json.parse(transport.last_request().unwrap().body.unwrap())
+  assert_eq(
+    body,
+    @json.parse("{\"records\":[{\"id\":\"r1\",\"document\":\"hello\"}]}"),
+  )
+}
+
+///|
+test "collection tolerant of missing optional fields still requires id" {
+  let json = @json.parse("{\"name\":\"n\"}")
+  let result = try_catch(() => {
+    ignore(@chroma-client.Collection::from_json(json))
+  })
+  assert_true(result is Err(Decode(_)))
+}
+
+///|
+test "validate_limit_offset accepts an empty window" {
+  @chroma-client.validate_limit_offset(None, None) catch {
+    _ => fail("unexpected error")
+  }
+  @chroma-client.validate_limit_offset(Some(10), None) catch {
+    _ => fail("unexpected error")
+  }
+}

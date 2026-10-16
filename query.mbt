@@ -48,13 +48,14 @@ fn Include::to_json(self : Include) -> Json {
 }
 
 ///|
-/// Reads a `QueryResult` from a query/get response.
+/// Reads a `QueryResult` from a get response.
 ///
-/// Query responses nest the result arrays one level deeper than get
-/// responses (one entry per query embedding), so `unwrap_first` flattens
-/// the common single-query case.
-pub fn QueryResult::from_json(json : Json) -> QueryResult {
-  let ids = string_array(optional_array(json, "ids"))
+/// `ids` is the one field every result must carry, so its absence is a
+/// decode error rather than an empty result: an empty `ids` is a valid
+/// answer, a missing one means the response is not a result set. The
+/// remaining fields depend on `include`, so they stay optional.
+pub fn QueryResult::from_json(json : Json) -> QueryResult raise ChromaError {
+  let ids = string_array(required_array(json, "ids"))
   let documents = optional_string_array(optional_array(json, "documents"))
   let metadatas = metadata_array(optional_array(json, "metadatas"))
   let distances = optional_number_array(optional_array(json, "distances"))
@@ -65,6 +66,10 @@ pub fn QueryResult::from_json(json : Json) -> QueryResult {
 ///|
 /// Reads a query response, where each field is an array with one entry per
 /// query embedding. Returns the result for the first embedding.
+///
+/// Unlike `from_query_json`, the nested `ids` may legitimately be missing
+/// when the query matched nothing, so an absent field still means "no
+/// results" here.
 pub fn QueryResult::from_query_json(json : Json) -> QueryResult {
   let ids = string_array(first_row(optional_array(json, "ids")))
   let documents = optional_string_array(
@@ -167,7 +172,10 @@ pub fn[T : @http.Transport] ChromaClient::query_text(
   texts : Array[String],
   n_results~ : Int32 = 10,
   include_fields~ : Include = Include::default(),
+  filter~ : Filter = Filter::new(),
 ) -> QueryResult raise ChromaError {
+  validate_n_results(n_results)
+  validate_limit_offset(filter.limit, filter.offset)
   let items : Array[Json] = []
   for text in texts {
     items.push(Json::string(text))
@@ -176,6 +184,7 @@ pub fn[T : @http.Transport] ChromaClient::query_text(
   body["query_texts"] = Json::array(items)
   body["n_results"] = Json::number(n_results.to_double())
   body["include"] = include_fields.to_json()
+  append_filter(body, filter)
   self.run_query(collection_id, Json::object(body))
 }
 
@@ -187,7 +196,10 @@ pub fn[T : @http.Transport] ChromaClient::query_embeddings(
   embeddings : Array[Embedding],
   n_results~ : Int32 = 10,
   include_fields~ : Include = Include::default(),
+  filter~ : Filter = Filter::new(),
 ) -> QueryResult raise ChromaError {
+  validate_n_results(n_results)
+  validate_limit_offset(filter.limit, filter.offset)
   let items : Array[Json] = []
   for embedding in embeddings {
     items.push(embedding_to_json(embedding))
@@ -196,6 +208,7 @@ pub fn[T : @http.Transport] ChromaClient::query_embeddings(
   body["query_embeddings"] = Json::array(items)
   body["n_results"] = Json::number(n_results.to_double())
   body["include"] = include_fields.to_json()
+  append_filter(body, filter)
   self.run_query(collection_id, Json::object(body))
 }
 
@@ -215,3 +228,29 @@ pub extend Include with Eq::{not_equal, equal}
 
 ///|
 pub extend Include with @debug.Debug::{to_repr}
+
+///|
+/// Rejects an `n_results` that Chroma cannot answer.
+pub fn validate_n_results(n_results : Int32) -> Unit raise ChromaError {
+  if n_results <= 0 {
+    raise ChromaError::InvalidArgument(
+      "n_results must be greater than zero, got " + n_results.to_string(),
+    )
+  }
+}
+
+///|
+/// Copies the `where` clauses of a filter into a query body.
+///
+/// Chroma accepts `where` on queries but rejects `limit`, `offset` and
+/// `ids` there, so only the clauses are carried over.
+fn append_filter(body : Map[String, Json], filter : Filter) -> Unit {
+  match filter.where_clause {
+    Some(value) => body["where"] = value
+    None => ()
+  }
+  match filter.where_document_clause {
+    Some(value) => body["where_document"] = value
+    None => ()
+  }
+}

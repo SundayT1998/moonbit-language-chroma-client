@@ -8,6 +8,7 @@ pub(all) struct Record {
   document : String?
   embedding : Embedding?
   metadata : Metadata
+  embedding_function : Json?
 } derive(Eq, Debug)
 
 ///|
@@ -17,7 +18,13 @@ pub fn Record::of_document(
   document : String,
   metadata~ : Metadata = [],
 ) -> Record {
-  { id, document: Some(document), embedding: None, metadata, }
+  {
+    id,
+    document: Some(document),
+    embedding: None,
+    metadata,
+    embedding_function: None,
+  }
 }
 
 ///|
@@ -27,7 +34,41 @@ pub fn Record::of_embedding(
   embedding : Embedding,
   metadata~ : Metadata = [],
 ) -> Record {
-  { id, document: None, embedding: Some(embedding), metadata, }
+  {
+    id,
+    document: None,
+    embedding: Some(embedding),
+    metadata,
+    embedding_function: None,
+  }
+}
+
+///|
+/// Returns a copy of the record that pins the embedding function it should
+/// be embedded with.
+///
+/// Chroma v2 accepts a per-record `embedding_function` override on
+/// `add`/`upsert`, but only when the record carries a `document`: with a
+/// caller-supplied `embedding` there is nothing left to embed, and the
+/// server answers 422. This client therefore refuses the combination up
+/// front instead of emitting a request that cannot succeed.
+///
+/// Overriding per record is only worth it when one collection holds
+/// documents written with different functions; when every record shares a
+/// function, set it once on the collection via `CollectionConfig`.
+pub fn Record::with_embedding_function(
+  self : Record,
+  config : Json,
+) -> Record raise ChromaError {
+  match self.document {
+    Some(_) => { ..self, embedding_function: Some(config), }
+    None =>
+      raise ChromaError::InvalidArgument(
+        "record " +
+        self.id +
+        " has no document, so an embedding_function override has nothing to embed",
+      )
+  }
 }
 
 ///|
@@ -45,6 +86,10 @@ pub fn Record::to_json(self : Record) -> Json {
   }
   if self.metadata.length() > 0 {
     body["metadata"] = metadata_to_json(self.metadata)
+  }
+  match self.embedding_function {
+    Some(config) => body["embedding_function"] = config
+    None => ()
   }
   Json::object(body)
 }
@@ -233,6 +278,7 @@ pub fn[T : @http.Transport] ChromaClient::get(
   collection_id : String,
   filter~ : Filter = Filter::new(),
 ) -> QueryResult raise ChromaError {
+  validate_limit_offset(filter.limit, filter.offset)
   let body = filter.to_json()
   let path = self.collection_path(collection_id) + "/get"
   QueryResult::from_json(self.send_json(@http.Post, path, body~))
