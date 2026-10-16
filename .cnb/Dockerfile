@@ -6,16 +6,6 @@ FROM cnbcool/default-dev-env:latest
 
 ARG MOONBIT_CLI=https://cli.moonbitlang.cn
 
-# deb.debian.org -> mirrors.ustc.edu.cn
-# mirrors.cloud.tencent.com -> mirrors.ustc.edu.cn
-# 新版 Debian 只有 /etc/apt/sources.list.d/debian.sources，不存在 /etc/apt/sources.list，
-# 因此不能盲目 sed 该文件，需先判断存在再改。
-RUN for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
-        if [ -f "$f" ]; then \
-            sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g; s/mirrors.cloud.tencent.com/mirrors.ustc.edu.cn/g' "$f"; \
-        fi; \
-    done
-
 # cnbcool/default-dev-env 预装里没有 C 编译器与 glibc 头文件，
 # 而 `moon test --target all` 的 native 后端需要它们，这里补上。
 # 该镜像已把 apt 源换成腾讯云镜像，安装速度有保障。
