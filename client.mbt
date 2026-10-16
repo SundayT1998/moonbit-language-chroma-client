@@ -167,17 +167,31 @@ fn required_string(json : Json, key : String) -> String raise ChromaError {
 }
 
 ///|
-/// Reads a required integer field.
-fn required_int(json : Json, key : String) -> Int32 raise ChromaError {
-  let value = required_object(json, key)
-  match value {
+/// Reads a count response.
+///
+/// Chroma's count endpoints answer with a bare integer
+/// (`GET /collections/{id}/count` returns `3`, not `{"count": 3}`). A
+/// `{"count": n}` envelope is accepted too, so a server that wraps the value
+/// still decodes.
+fn decode_count(json : Json, endpoint : String) -> Int32 raise ChromaError {
+  match json {
     Json::Number(n, ..) => n.to_int()
-    Json::String(s) =>
-      @string.parse_int(s) catch {
+    Json::Object(fields) =>
+      match fields.get("count") {
+        Some(Json::Number(n, ..)) => n.to_int()
+        Some(Json::String(s)) =>
+          @string.parse_int(s) catch {
+            _ =>
+              raise ChromaError::Decode(
+                endpoint + " returned a non-numeric count",
+              )
+          }
         _ =>
-          raise ChromaError::Decode("field \"" + key + "\" is not an integer")
+          raise ChromaError::Decode(
+            endpoint + " response has no \"count\" field",
+          )
       }
-    _ => raise ChromaError::Decode("field \"" + key + "\" is not an integer")
+    _ => raise ChromaError::Decode(endpoint + " did not return a count")
   }
 }
 
@@ -232,14 +246,52 @@ fn[T] ChromaClient::collection_path(
 }
 
 ///|
-/// Checks that the server is reachable and returns its version string.
+/// Checks that the server is reachable and returns its heartbeat timestamp.
+///
+/// Chroma answers `{"nanosecond heartbeat": <ns since the epoch>}`. The
+/// nanoseconds do not fit an `Int32`, so the value is returned as an `Int64`;
+/// a server that answers with a bare number (or with an unexpected shape) is
+/// accepted too, since the point of the call is reachability rather than the
+/// timestamp itself.
 pub fn[T : @http.Transport] ChromaClient::heartbeat(
   self : ChromaClient[T],
-) -> Int32 raise ChromaError {
-  let response = self.send_json(@http.Get, "heartbeat")
-  match response {
-    Json::Number(n, ..) => n.to_int()
-    _ => 0
+) -> Int64 raise ChromaError {
+  self.heartbeat_value(self.send_json(@http.Get, "heartbeat"))
+}
+
+///|
+/// Reads a heartbeat response, tolerating both the documented envelope and a
+/// bare number.
+fn[T] ChromaClient::heartbeat_value(
+  self : ChromaClient[T],
+  response : Json,
+) -> Int64 raise ChromaError {
+  ignore(self)
+  let (key, value) = match response {
+    Json::Object(fields) =>
+      // `"nanosecond heartbeat"` is the documented key; fall back to the
+      // first field so a renamed envelope still yields a number.
+      match fields.get("nanosecond heartbeat") {
+        Some(value) => ("nanosecond heartbeat", value)
+        None =>
+          match fields.iter().next() {
+            Some(entry) => entry
+            None => ("", Json::null())
+          }
+      }
+    other => ("", other)
+  }
+  ignore(key)
+  match value {
+    Json::Number(n, ..) => n.to_int64()
+    Json::String(s) =>
+      @string.parse_int64(s) catch {
+        _ => raise ChromaError::Decode("heartbeat is not an integer")
+      }
+    _ =>
+      raise ChromaError::Decode(
+        "heartbeat response is not an object with a nanosecond timestamp",
+      )
   }
 }
 

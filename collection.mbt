@@ -51,14 +51,14 @@ fn optional_int(json : Json, key : String) -> Int32? {
 }
 
 ///|
-/// Parameters for `get_or_create_collection`.
+/// Parameters for `get_or_create_collection` and `create_collection`.
 ///
-/// `embedding_function` is the name the *server* should use to embed
-/// documents, so no embedding logic is needed on the client. Chroma's own
-/// default is `default`.
+/// `configuration` is sent verbatim, so index options the server knows about
+/// (for example `{"hnsw": {"space": "cosine"}}`) can be set without waiting
+/// for this client to model them. When it is unset a default L2 HNSW
+/// configuration is sent.
 pub(all) struct CollectionConfig {
   metadata : Metadata
-  embedding_function : String?
   configuration : Json?
 } derive(Eq, Debug)
 
@@ -66,31 +66,27 @@ pub(all) struct CollectionConfig {
 /// Builds a `CollectionConfig` with all options unset.
 pub fn CollectionConfig::new(
   metadata~ : Metadata = [],
-  embedding_function~ : String? = None,
   configuration~ : Json? = None,
 ) -> CollectionConfig {
-  { metadata, embedding_function, configuration, }
+  { metadata, configuration, }
 }
-
-///|
-/// Serializes the collection configuration for a create/modify request.
 
 ///|
 /// Builds the request body for creating a collection.
 ///
-/// Three fields are always sent: `name`, the `configuration` that tells the
-/// server which index to build, and the name of the server-side embedding
-/// function to use when only documents are supplied.
-fn create_body(name : String, config : CollectionConfig) -> Json {
+/// Chroma's `CreateCollection` model takes `name`, `configuration`,
+/// `metadata` and `get_or_create`. There is no top-level
+/// `embedding_function` field: a collection's embedding function is
+/// configured through `configuration`, so `CollectionConfig`'s name is not
+/// sent on its own.
+fn create_body(
+  name : String,
+  config : CollectionConfig,
+  get_or_create~ : Bool,
+) -> Json {
   let body : Map[String, Json] = Map([])
   body["name"] = Json::string(name)
-  let embedding_name = match config.embedding_function {
-    Some(function) => function
-    None => "default"
-  }
-  body["embedding_function"] = Json::object({
-    "name": Json::string(embedding_name),
-  })
+  body["get_or_create"] = Json::boolean(get_or_create)
   match config.configuration {
     Some(configuration) => body["configuration"] = configuration
     None => {
@@ -120,12 +116,18 @@ pub extend CollectionConfig with @debug.Debug::{to_repr}
 ///|
 /// Serializes a collection configuration, useful for logging and for
 /// building custom requests.
+///
+/// Same value as `CollectionConfig::to_json`; the name is kept because the
+/// logging use case reads better with it.
 pub fn debug_collection_config(config : CollectionConfig) -> Json {
-  create_body("", config)
+  config.to_json()
 }
 
 ///|
-/// Serializes the collection configuration for a create/modify request.
+/// Serializes the collection configuration for a create request.
+///
+/// This is the body `create_collection` sends, with `get_or_create` set to
+/// `false`.
 pub fn CollectionConfig::to_json(config : CollectionConfig) -> Json {
-  create_body("", config)
+  create_body("", config, get_or_create=false)
 }

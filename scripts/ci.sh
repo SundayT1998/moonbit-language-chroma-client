@@ -6,6 +6,11 @@
 # already on PATH: GitHub installs it in the workflow, CNB bakes it into
 # .cnb/Dockerfile.
 #
+# The tests that need a real Chroma server live in a separate script
+# (scripts/integration.sh), because they need Docker and a published image.
+# `moon test` below still covers them: they skip when CHROMA_ENDPOINT is
+# unset, which is the case here.
+#
 # Usage: sh scripts/ci.sh [step ...]
 #   steps: update fmt check info test coverage build
 #   (default: every step, in order)

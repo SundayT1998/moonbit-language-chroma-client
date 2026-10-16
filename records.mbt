@@ -1,30 +1,27 @@
 ///|
 /// A record stored in a collection.
 ///
-/// `embedding` is `None` for records whose vectors are produced by the
-/// server-side embedding function.
+/// `embedding` is `None` for a record that carries only a document. Chroma
+/// needs a vector for every record, so a batch with a missing embedding is
+/// rejected locally instead of by the server (see `validate_records`).
 pub(all) struct Record {
   id : String
   document : String?
   embedding : Embedding?
   metadata : Metadata
-  embedding_function : Json?
 } derive(Eq, Debug)
 
 ///|
-/// Builds a document record that the server will embed.
+/// Builds a record that carries a document and no embedding.
+///
+/// Chroma 1.x has no server-side embedding, so a record built this way can
+/// only be stored once an `embedding` is attached via `Record::with_embedding`.
 pub fn Record::of_document(
   id : String,
   document : String,
   metadata~ : Metadata = [],
 ) -> Record {
-  {
-    id,
-    document: Some(document),
-    embedding: None,
-    metadata,
-    embedding_function: None,
-  }
+  { id, document: Some(document), embedding: None, metadata, }
 }
 
 ///|
@@ -34,62 +31,83 @@ pub fn Record::of_embedding(
   embedding : Embedding,
   metadata~ : Metadata = [],
 ) -> Record {
-  {
-    id,
-    document: None,
-    embedding: Some(embedding),
-    metadata,
-    embedding_function: None,
-  }
+  { id, document: None, embedding: Some(embedding), metadata, }
 }
 
 ///|
-/// Returns a copy of the record that pins the embedding function it should
-/// be embedded with.
+/// Returns a copy of the record with `embedding` attached.
 ///
-/// Chroma v2 accepts a per-record `embedding_function` override on
-/// `add`/`upsert`, but only when the record carries a `document`: with a
-/// caller-supplied `embedding` there is nothing left to embed, and the
-/// server answers 422. This client therefore refuses the combination up
-/// front instead of emitting a request that cannot succeed.
-///
-/// Overriding per record is only worth it when one collection holds
-/// documents written with different functions; when every record shares a
-/// function, set it once on the collection via `CollectionConfig`.
-pub fn Record::with_embedding_function(
-  self : Record,
-  config : Json,
-) -> Record raise ChromaError {
-  match self.document {
-    Some(_) => { ..self, embedding_function: Some(config), }
-    None =>
-      raise ChromaError::InvalidArgument(
-        "record " +
-        self.id +
-        " has no document, so an embedding_function override has nothing to embed",
-      )
-  }
+/// Use it to add a vector to a record built by `Record::of_document`; a
+/// record with explicit coordinates is built with `Record::of_embedding`.
+pub fn Record::with_embedding(self : Record, embedding : Embedding) -> Record {
+  { ..self, embedding: Some(embedding), }
 }
 
 ///|
-/// Serializes a record into the add/upsert wire format.
-pub fn Record::to_json(self : Record) -> Json {
+/// Returns a copy of the record carrying `document` as well.
+///
+/// Pairs with `Record::of_embedding` when the vector is known first and the
+/// text it stands for second.
+pub fn Record::with_document(self : Record, document : String) -> Record {
+  { ..self, document: Some(document), }
+}
+
+///|
+/// Returns a copy of the record carrying `metadata` instead of its own.
+pub fn Record::with_metadata(self : Record, metadata : Metadata) -> Record {
+  { ..self, metadata, }
+}
+
+///|
+/// Serializes a batch of records into the columnar body Chroma expects.
+///
+/// Chroma does not take records one by one: the add/upsert/update models are
+/// parallel arrays (`ids`, `embeddings`, `documents`, `metadatas`) that must
+/// be the same length and aligned by index. A column is emitted only when it
+/// carries data, and a `null` marks a record that has no value for it — that
+/// position-preserving `null` is what keeps the arrays aligned.
+///
+/// `embeddings` is the exception: Chroma requires the field and rejects a
+/// batch where it is missing, null or empty, so a record without coordinates
+/// has no representation here. `validate_records` refuses such a batch
+/// before it is serialized.
+pub fn records_to_columns(records : Array[Record]) -> Json {
+  let ids : Array[Json] = []
+  let embeddings : Array[Json] = []
+  let documents : Array[Json] = []
+  let metadatas : Array[Json] = []
+  let mut has_documents = false
+  let mut has_metadatas = false
+  for record in records {
+    ids.push(Json::string(record.id))
+    embeddings.push(
+      match record.embedding {
+        Some(embedding) => embedding_to_json(embedding)
+        None => Json::null()
+      },
+    )
+    match record.document {
+      Some(document) => {
+        has_documents = true
+        documents.push(Json::string(document))
+      }
+      None => documents.push(Json::null())
+    }
+    if record.metadata.length() > 0 {
+      has_metadatas = true
+      metadatas.push(metadata_to_json(record.metadata))
+    } else {
+      metadatas.push(Json::null())
+    }
+  }
   let body : Map[String, Json] = Map([])
-  body["id"] = Json::string(self.id)
-  match self.document {
-    Some(document) => body["document"] = Json::string(document)
-    None => ()
+  body["ids"] = Json::array(ids)
+  body["embeddings"] = Json::array(embeddings)
+  if has_documents {
+    body["documents"] = Json::array(documents)
   }
-  match self.embedding {
-    Some(embedding) => body["embedding"] = embedding_to_json(embedding)
-    None => ()
-  }
-  if self.metadata.length() > 0 {
-    body["metadata"] = metadata_to_json(self.metadata)
-  }
-  match self.embedding_function {
-    Some(config) => body["embedding_function"] = config
-    None => ()
+  if has_metadatas {
+    body["metadatas"] = Json::array(metadatas)
   }
   Json::object(body)
 }
@@ -190,13 +208,8 @@ pub fn[T : @http.Transport] ChromaClient::add(
   records : Array[Record],
 ) -> Unit raise ChromaError {
   validate_records(records)
-  let items : Array[Json] = []
-  for record in records {
-    items.push(record.to_json())
-  }
-  let body = Json::object({ "records": Json::array(items) })
   let path = self.collection_path(collection_id) + "/add"
-  ignore(self.send_json(@http.Post, path, body~))
+  ignore(self.send_json(@http.Post, path, body=records_to_columns(records)))
 }
 
 ///|
@@ -207,13 +220,8 @@ pub fn[T : @http.Transport] ChromaClient::upsert(
   records : Array[Record],
 ) -> Unit raise ChromaError {
   validate_records(records)
-  let items : Array[Json] = []
-  for record in records {
-    items.push(record.to_json())
-  }
-  let body = Json::object({ "records": Json::array(items) })
   let path = self.collection_path(collection_id) + "/upsert"
-  ignore(self.send_json(@http.Post, path, body~))
+  ignore(self.send_json(@http.Post, path, body=records_to_columns(records)))
 }
 
 ///|
@@ -226,13 +234,15 @@ pub fn[T : @http.Transport] ChromaClient::update(
   records : Array[Record],
   filter~ : Filter = Filter::new(),
 ) -> Unit raise ChromaError {
-  validate_records(records)
-  let items : Array[Json] = []
-  for record in records {
-    items.push(record.to_json())
+  // An update patches the records it names, so a missing embedding or
+  // document is the normal case rather than an error. Chroma's update model
+  // accepts `null` in a column to mean "leave this field alone", which is
+  // exactly what `records_to_columns` emits.
+  validate_records(records, require_embedding=false)
+  let body : Map[String, Json] = match records_to_columns(records) {
+    Json::Object(fields) => fields.copy()
+    _ => Map([])
   }
-  let body : Map[String, Json] = Map([])
-  body["records"] = Json::array(items)
   match filter.where_clause {
     Some(value) => body["where"] = value
     None => ()
@@ -308,10 +318,17 @@ pub extend Filter with @debug.Debug::{to_repr}
 ///|
 /// Rejects record batches Chroma would refuse, before a request is built.
 ///
-/// Chroma answers 400 for an empty batch, a blank id, and for a record that
-/// carries neither a document nor an embedding. All three are local mistakes
-/// with local fixes, so they are caught here instead of after a round-trip.
-pub fn validate_records(records : Array[Record]) -> Unit raise ChromaError {
+/// Chroma answers 400 for an empty batch and for a blank id, and its
+/// add/upsert models make `embeddings` mandatory, so a batch whose records
+/// have no vectors is refused too. All of these are local mistakes with local
+/// fixes, so they are caught here instead of after a round-trip.
+///
+/// `require_embedding` is `false` for `update`, where omitting a field is how
+/// a caller says "change only what I passed".
+pub fn validate_records(
+  records : Array[Record],
+  require_embedding~ : Bool = true,
+) -> Unit raise ChromaError {
   if records.length() == 0 {
     raise ChromaError::InvalidArgument(
       "records must not be empty; Chroma rejects a batch with no records",
@@ -324,11 +341,19 @@ pub fn validate_records(records : Array[Record]) -> Unit raise ChromaError {
         "record at index " + index.to_string() + " has an empty id",
       )
     }
-    if record.document is None && record.embedding is None {
+    if require_embedding && record.embedding is None {
+      if record.document is None {
+        raise ChromaError::InvalidArgument(
+          "record " +
+          record.id +
+          " has neither a document nor an embedding; Chroma cannot store it",
+        )
+      }
       raise ChromaError::InvalidArgument(
         "record " +
         record.id +
-        " has neither a document nor an embedding; Chroma cannot store it",
+        " has a document but no embedding; Chroma 1.x does not embed documents server-side, " +
+        "so attach a vector with Record::with_embedding before storing it",
       )
     }
     index = index + 1

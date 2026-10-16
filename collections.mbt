@@ -27,14 +27,14 @@ pub fn[T : @http.Transport] ChromaClient::count_collections(
     @http.Get,
     self.database_prefix() + "/collections_count",
   )
-  required_int(response, "count")
+  decode_count(response, "collections_count")
 }
 
 ///|
-/// Returns a collection handle for `name`, creating it if it does not exist.
+/// Returns a collection handle for `name`, creating it when it is missing.
 ///
-/// This is the usual entry point: Chroma resolves the embedding function
-/// server-side, so the client never needs to embed text itself.
+/// Sends `get_or_create: true`, so calling it twice finds the collection
+/// instead of colliding on the second call.
 pub fn[T : @http.Transport] ChromaClient::get_or_create_collection(
   self : ChromaClient[T],
   name : String,
@@ -42,16 +42,20 @@ pub fn[T : @http.Transport] ChromaClient::get_or_create_collection(
 ) -> Collection raise ChromaError {
   let path = self.database_prefix() + "/collections"
   Collection::from_json(
-    self.send_json(@http.Post, path, body=create_body(name, config)),
+    self.send_json(
+      @http.Post,
+      path,
+      body=create_body(name, config, get_or_create=true),
+    ),
   )
 }
 
 ///|
-/// Returns a collection handle for `name`, creating it only when missing.
+/// Creates a collection, failing when `name` is already taken.
 ///
-/// Mirrors Chroma's `get_or_create` behaviour but via the dedicated
-/// endpoint so the server can report a conflict when the collection exists
-/// with a different configuration.
+/// Sends `get_or_create: false`, so the server answers 409 rather than
+/// silently returning a collection that may have a different
+/// configuration. Use `get_or_create_collection` when either outcome is fine.
 pub fn[T : @http.Transport] ChromaClient::create_collection(
   self : ChromaClient[T],
   name : String,
@@ -59,7 +63,11 @@ pub fn[T : @http.Transport] ChromaClient::create_collection(
 ) -> Collection raise ChromaError {
   let path = self.database_prefix() + "/collections"
   Collection::from_json(
-    self.send_json(@http.Post, path, body=create_body(name, config)),
+    self.send_json(
+      @http.Post,
+      path,
+      body=create_body(name, config, get_or_create=false),
+    ),
   )
 }
 
@@ -112,8 +120,10 @@ pub fn[T : @http.Transport] ChromaClient::modify_collection(
     Some(value) => body["new_name"] = Json::string(value)
     None => ()
   }
+  // Chroma's `UpdateCollection` model names this field `new_metadata`;
+  // sending `metadata` is silently ignored by the server.
   match metadata {
-    Some(value) => body["metadata"] = metadata_to_json(value)
+    Some(value) => body["new_metadata"] = metadata_to_json(value)
     None => ()
   }
   let path = self.database_prefix() +
@@ -129,7 +139,7 @@ pub fn[T : @http.Transport] ChromaClient::count(
   collection_id : String,
 ) -> Int32 raise ChromaError {
   let path = self.collection_path(collection_id) + "/count"
-  required_int(self.send_json(@http.Get, path), "count")
+  decode_count(self.send_json(@http.Get, path), "collections/{id}/count")
 }
 
 ///|

@@ -129,3 +129,19 @@ pub extend MemoryTransport with Transport::{send}
 
 ///|
 pub extend Method with Show::{to_string, output}
+
+///|
+/// The asynchronous counterpart of `Transport`.
+///
+/// `Transport` is synchronous, which is enough for `MemoryTransport` but not
+/// for the real HTTP stack: `moonbitlang/async/http` only exposes `async`
+/// functions, and an `async` call cannot be made from a synchronous one. A
+/// native or wasm build therefore implements this trait instead, and the
+/// client methods gain an `async` suffix.
+///
+/// The two traits carry the same request and response types, so switching
+/// between a scripted test and a live server changes only which `send` is
+/// implemented.
+pub(open) trait AsyncTransport {
+  async fn send_async(Self, Request) -> Response
+}

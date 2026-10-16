@@ -165,31 +165,6 @@ fn embedding_array(values : Array[Json]) -> Array[Embedding?] {
 }
 
 ///|
-/// Searches a collection by text, letting the server embed the queries.
-pub fn[T : @http.Transport] ChromaClient::query_text(
-  self : ChromaClient[T],
-  collection_id : String,
-  texts : Array[String],
-  n_results~ : Int32 = 10,
-  include_fields~ : Include = Include::default(),
-  filter~ : Filter = Filter::new(),
-) -> QueryResult raise ChromaError {
-  validate_n_results(n_results)
-  validate_limit_offset(filter.limit, filter.offset)
-  let items : Array[Json] = []
-  for text in texts {
-    items.push(Json::string(text))
-  }
-  validate_query_inputs("query_texts", items)
-  let body : Map[String, Json] = Map([])
-  body["query_texts"] = Json::array(items)
-  body["n_results"] = Json::number(n_results.to_double())
-  body["include"] = include_fields.to_json()
-  append_filter(body, filter)
-  self.run_query(collection_id, Json::object(body))
-}
-
-///|
 /// Searches a collection with caller-supplied query vectors.
 pub fn[T : @http.Transport] ChromaClient::query_embeddings(
   self : ChromaClient[T],

@@ -10,8 +10,21 @@ manage records without leaving the language.
 ## Design
 
 The library never performs socket I/O itself. Instead it builds requests and
-decodes responses, and delegates the actual transport to a `Transport`
-implementation you supply. That keeps the client:
+decodes responses, and delegates the actual transport to a trait you
+implement. There are two of them:
+
+- `Transport` — synchronous. `MemoryTransport` implements it, so scripted
+  responses cover the whole request/response cycle in ordinary `moon test`
+  runs.
+- `AsyncTransport` — asynchronous, with `async fn send_async`. This is what a
+  real HTTP stack implements, because `moonbitlang/async/http` only offers
+  `async` functions and an `async` call cannot be made from a synchronous one.
+
+Every public method exists in both flavours: `client.add(...)` is synchronous,
+`client.add_async(...)` is asynchronous. Choosing between them is choosing
+which trait your transport implements and whether your call site is `async`.
+
+Keeping I/O out of the library means the client:
 
 - **portable** — the same code runs on `wasm`, `wasm-gc`, `js` and `native`;
 - **testable** — `MemoryTransport` replays scripted responses, so the whole
@@ -29,38 +42,49 @@ moon add SundayT1998/chroma-client
 
 ```moonbit nocheck
 ///|
-fn example(transport : @chroma.Transport) -> Unit raise @chroma.ChromaError {
+async fn example(transport : MyTransport) -> Unit raise @chroma.ChromaError {
   let client = @chroma.ChromaClient::new(transport)
 
-  let collection = client.get_or_create_collection("notes")
+  let collection = client.get_or_create_collection_async("notes")
 
-  client.add(collection.id, [
-    @chroma.Record::of_document("r1", "MoonBit is a language for the web"),
-    @chroma.Record::of_document("r2", "Chroma stores embeddings"),
+  // Chroma 1.x stores vectors, not text: every record needs coordinates.
+  client.add_async(collection.id, [
+    @chroma.Record::of_embedding("r1", [1.0, 0.0, 0.0]).with_document(
+      "MoonBit is a language for the web",
+    ),
+    @chroma.Record::of_embedding("r2", [0.0, 1.0, 0.0]).with_document(
+      "Chroma stores embeddings",
+    ),
   ])
 
-  let result = client.query_text(
+  let result = client.query_embeddings_async(
     collection.id,
-    ["embedding database"],
+    [[1.0, 0.0, 0.0]],
     n_results=2,
   )
-  for i, id in result.ids {
+  for id in result.ids {
     println(id)
   }
 }
 ```
 
-Only documents are supplied, so Chroma embeds them server-side with its
-default embedding function — the client needs no embedding model of its own.
+`MyTransport` is any type that implements `@chroma.AsyncTransport` — see
+[Adding a real transport](#adding-a-real-transport) and `examples/native/`.
+
+> **Chroma 1.x has no server-side embedding.** An `add` whose records carry
+> documents but no vectors is rejected by the server, so the client refuses it
+> locally and points at `Record::with_embedding`. Produce the vectors with
+> whatever embedding model you already use; `Record::of_document(...).with_embedding(vec)`
+> is the usual shape.
 
 ## Choosing what a query returns
 
 `QueryResult` mirrors Chroma's `include` field:
 
 ```moonbit nocheck
-client.query_text(
+client.query_embeddings_async(
   collection.id,
-  ["vector search"],
+  [[0.1, 0.9, 0.0]],
   n_results=5,
   include_fields=@chroma.Include::all(),
 )
@@ -77,7 +101,7 @@ client.query_text(
 let filter = @chroma.Filter::new()
   .with_metadata("source", @chroma.MString("handbook"))
   .with_limit(20)
-client.get(collection.id, filter=filter)
+client.get_async(collection.id, filter=filter)
 ```
 
 ## Metadata types
@@ -97,26 +121,63 @@ Collections and records take a `Metadata` value, which is an ordered list of
 
 ## Adding a real transport
 
-Implement `@chroma.Transport` against whatever HTTP stack you use:
+Implement `@chroma.AsyncTransport` against whatever HTTP stack you use. With
+`moonbitlang/async/http`, the whole transport is a dozen lines:
 
 ```moonbit nocheck
 ///|
-struct MyTransport
-
-///|
-impl @chroma.Transport for MyTransport with fn send(self, request) {
-  let response = my_http_stack_call(
-    request.method,
+impl @chroma.AsyncTransport for MyTransport with fn send_async(self, request) {
+  let headers : @ah.Headers = Map([])
+  for entry in request.headers {
+    let (key, value) = entry
+    headers[key] = value
+  }
+  let payload : &@aio.Data = match request.body {
+    Some(body) => body
+    None => ""
+  }
+  let (response, response_body) = @ah.request(
     request.url,
-    request.headers,
-    request.body,
+    to_ah_method(request.verb),
+    headers,
+    payload,
   )
-  @chroma.json_response(response.status, response.body)
+  {
+    status: response.code,
+    headers: converted(response.headers),
+    body: response_body.text(),
+  }
 }
 ```
 
-`Request` carries the verb, URL, headers and optional JSON body; the
-transport only has to return a `Response`.
+`Request` carries the verb, URL, headers and optional JSON body; the transport
+only has to return a `Response`.
+
+A complete, runnable version lives in `examples/native/`. With
+`moonbitlang/async/http` the `impl` alone is not enough: MoonBit also needs an
+`extend` declaration to make the method callable:
+
+```moonbit night
+///|
+pub extend MyTransport with @chroma.AsyncTransport::{send_async}
+```
+
+## Native transport
+
+`examples/native/` holds a transport wired to `moonbitlang/async/http`, which
+is the only HTTP client in the ecosystem that runs on `native`:
+
+```bash
+moon run examples/native --target native -- http://localhost:8000 my-collection
+```
+
+It creates a collection, adds vectors, counts, queries with distances, applies
+a metadata filter, and deletes the collection — a full round-trip against a
+real server, and the fastest way to check that a local Chroma is reachable.
+
+For a long-lived application, hold one `@ah.Client` open and reuse it rather
+than connecting per request: `@ah.Client` keeps the connection alive, while
+the example's `@ah.request` helper does not.
 
 ## Authentication
 
@@ -177,32 +238,41 @@ round-trip and an opaque 400:
 
 ```moonbit nocheck
 ///|
-client.get(
+client.get_async(
   collection.id,
   filter=@chroma.Filter::new(limit=Some(10), offset=Some(5)),
 )
 ```
 
-`query_text` / `query_embeddings` accept `n_results`, and reject values `<= 0`
-the same way. On a query Chroma only honours `where` / `where_document`, so
-`limit`, `offset` and `ids` are dropped rather than forwarded.
+`query_embeddings` accepts `n_results` and rejects values `<= 0` the same way.
+On a query Chroma only honours `where` / `where_document`, so `limit`, `offset`
+and `ids` are dropped rather than forwarded.
 
-## Working with alternative embedding functions
+## Records and vectors
 
-By default the server embeds documents and no embedding logic lives on the
-client. When one collection mixes documents written with different functions, a
-single record can pin its own:
+Chroma stores a vector for every record; the document, when present, is the
+text that vector stands for. The client models that directly:
 
 ```moonbit nocheck
 ///|
-let record = @chroma.Record::of_document("r1", "hello").with_embedding_function(
-  @json.parse("{\"name\": \"custom\"}"),
-)
+// Vector first, text attached afterwards.
+@chroma.Record::of_embedding("r1", [1.0, 0.0]).with_document("hello")
+
+///|
+// Text first, vector attached afterwards.
+@chroma.Record::of_document("r2", "world").with_embedding([0.0, 1.0])
+
+///|
+// Metadata, either way.
+@chroma.Record::of_embedding("r3", [1.0, 1.0]).with_metadata([
+  ("source", @chroma.MString("handbook")),
+])
 ```
 
-The override only makes sense with a `document`; a record that already carries
-an `embedding` has nothing left to embed, so `with_embedding_function` raises
-`InvalidArgument` rather than sending a request the server would reject.
+`add` and `upsert` require the vector; `update` does not, because an update
+patches a record by id and a missing field means "leave this one alone". A
+batch that `add` would have to reject is refused before a request is built, so
+the failure names the record instead of arriving as a server-side 422.
 
 ## Errors
 
@@ -301,8 +371,7 @@ than a 400 and a round-trip:
 - an empty `records` batch on `add` / `upsert` / `update`;
 - a record with an empty `id`, or with neither a `document` nor an
   `embedding`;
-- an empty `texts` list on `query_text`, or an empty `embeddings` list on
-  `query_embeddings`;
+- an empty `embeddings` list on `query_embeddings`;
 - `n_results <= 0`, and an `offset` that is not smaller than `limit`.
 
 The checks are exposed as `validate_records`, `validate_query_inputs`,
@@ -323,40 +392,72 @@ on the request:
 
 ## Examples
 
+`cmd/main` needs no server: it uses a logging transport and prints the exact
+requests the client would send.
+
 ```bash
 moon run cmd/main -- my-collection
 ```
 
-The example uses a logging transport, so it runs without a live server and
-prints the exact requests the client would send.
+`examples/native` talks to a real Chroma server over
+`moonbitlang/async/http` — see [Native transport](#native-transport) above.
 
 ## Testing
 
-The same script runs locally, on GitHub Actions and on CNB:
+Two layers, both run by CI.
+
+The unit suite uses `MemoryTransport` and needs nothing but `moon`:
 
 ```bash
 sh scripts/ci.sh
 ```
 
-It expects `moon` on `PATH` (GitHub installs it in the workflow, CNB ships it
-in `.cnb/Dockerfile`) and then runs, in order: formatting, `moon check`,
-generated-interface freshness, tests with coverage, coverage reports, and
-debug + release builds.
-
-A single step can be run on its own, which is handy while developing:
+It runs, in order: formatting, `moon check`, generated-interface freshness,
+tests with coverage, coverage reports, and debug + release builds. A single
+step can be run on its own:
 
 ```bash
 sh scripts/ci.sh fmt check     # just formatting and type-checking
 sh scripts/ci.sh test coverage # just tests and coverage
 ```
 
+The integration suite in `integration/` runs against a real Chroma server and
+is what caught the protocol bugs the unit tests could not: scripted responses
+only prove the client agrees with itself. Those tests skip when
+`CHROMA_ENDPOINT` is unset, so `scripts/ci.sh` stays runnable without Docker.
+To run them, start a server and point the suite at it:
+
+```bash
+sh scripts/integration.sh      # starts chromadb/chroma, runs, tears down
+```
+
+or, against a server you already have:
+
+```bash
+CHROMA_ENDPOINT=http://localhost:8000 \
+  moon test --target native -p SundayT1998/chroma-client/integration
+```
+
+Both CI platforms run them: CNB starts the container through the `docker`
+service in `.cnb.yml`, and GitHub Actions uses a `services:` container on
+`ubuntu-latest` only, since the service container does not exist on macOS or
+Windows.
+
+Set `CHROMA_TEST_RUN_ID` when several jobs share one server: each run
+namespaces its collection names with it, so parallel runs cannot collide.
+
 ## Status
 
-Early but functional. The v2 collection, record and query endpoints are
+Early but functional, and verified against a live server rather than only
+against scripted responses. The v2 collection, record and query endpoints are
 implemented, including `count` and `peek`; token and basic authentication have
 shorthands on `Config`, and tenant/database selection is part of the config.
 Server errors are parsed into `ApiError`, transient failures can be retried
 explicitly, and request arguments are validated locally before they are sent.
+
+Both a synchronous and an asynchronous API exist, and the wire format matches
+Chroma 1.x: columnar record bodies, `get_or_create`, bare-integer counts, and
+no text-to-vector conversion on the server.
 
 ## License
 
