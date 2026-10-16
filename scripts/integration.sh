@@ -77,12 +77,34 @@ if [ "${elapsed}" -ge "${READY_MS}" ]; then
   exit 1
 fi
 
+# The caller is expected to have run scripts/ci.sh first, whose `update` step
+# is what makes `moonbitlang/async` resolvable. Syncing again here costs
+# nothing when the registry is already current and keeps this script usable on
+# its own — without it, a stale (or absent) registry fails the whole job with
+# "module was not found in the registry" instead of with a test failure.
+log "moon update"
+# `set -e` would abort here, and `moon update` exits non-zero even in the
+# (harmless) case where it only reports that the index is already current and
+# then regenerates the symbol index. The integration tests below re-run it and
+# surface a real failure, so treat this run as best-effort.
+moon update || echo "moon update reported a problem; continuing, see above"
+
 log "moon test --target native (integration)"
 # A run id namespaces the collections each test creates, so two jobs sharing
 # one server cannot collide, and leftovers from a failed job stay
 # identifiable.
 export CHROMA_ENDPOINT="${ENDPOINT}"
 export CHROMA_TEST_RUN_ID="${CHROMA_TEST_RUN_ID:-${CNB_BUILD_ID:-$$}}"
-moon test --target native --deny-warn -p SundayT1998/chroma-client/integration
+
+if ! moon test --target native --deny-warn -p SundayT1998/chroma-client/integration; then
+  echo "" >&2
+  echo "integration tests failed." >&2
+  echo "If the failure above is dependency resolution (not a test failure), the" >&2
+  echo "registry index in this runner is too old: re-run the job on a runner whose" >&2
+  echo "image was built after the dependency was published, or bake the index into" >&2
+  echo "the image (.cnb/Dockerfile, right after the toolchain install):" >&2
+  echo "    RUN moon update" >&2
+  exit 1
+fi
 
 log "integration passed"
