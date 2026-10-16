@@ -502,6 +502,58 @@ test "count reads the collection record count" {
 }
 
 ///|
+test "modify_collection sends new_metadata and new_name" {
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  let metadata : Array[(String, @chroma-client.MetadataValue)] = [
+    ("topic", @chroma-client.MString("ai")),
+  ]
+  ignore(
+    client.modify_collection(
+      "notes",
+      new_name=Some("renamed"),
+      metadata=Some(metadata),
+    ),
+  )
+  let request = transport.last_request().unwrap()
+  assert_eq(request.verb, Put)
+  assert_true(request.url.has_suffix("/collections/notes"))
+  // The server ignores a `metadata` field here, so the name of the field is
+  // the whole point of the test.
+  assert_eq(
+    @json.parse(request.body.unwrap()),
+    @json.parse(
+      "{\"new_name\":\"renamed\",\"new_metadata\":{\"topic\":\"ai\"}}",
+    ),
+  )
+}
+
+///|
+test "modify_collection omits the fields it is not given" {
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  ignore(client.modify_collection("notes"))
+  assert_eq(
+    @json.parse(transport.last_request().unwrap().body.unwrap()),
+    @json.parse("{}"),
+  )
+}
+
+///|
+test "modify_collection percent-encodes the collection name" {
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  ignore(client.modify_collection("my notes", new_name=Some("x")))
+  assert_true(transport.last_request().unwrap().url.contains("my%20notes"))
+}
+
+///|
 test "peek posts a bounded limit and decodes a flat result" {
   let transport = @chroma-client.MemoryTransport::new(responses=[
     @chroma-client.Response::json(
