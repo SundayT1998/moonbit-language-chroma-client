@@ -35,8 +35,22 @@ fn[T] ChromaClient::database_prefix(self : ChromaClient[T]) -> String {
 }
 
 ///|
+/// The largest response body the client will decode.
+///
+/// The client reads a whole body into one `String`, and MoonBit strings are
+/// UTF-8, so the limit is stated in bytes: 32 MiB is far above any realistic
+/// result set (a full `Include::all()` page of 1024-dimension vectors is a
+/// few megabytes) yet small enough that a runaway response cannot exhaust
+/// memory before the caller sees an error.
+///
+/// Truncating is not an option, because a half-parsed result set would look
+/// like data loss. A response past the limit fails loudly instead, and the
+/// caller can narrow `include`, lower `n_results` or page with `limit`.
+pub const MAX_RESPONSE_BYTES : Int32 = 32 * 1024 * 1024
+
+///|
 /// Sends a request through the transport, mapping non-2xx responses to
-/// `ChromaError::Status` and transport failures to
+/// `ChromaError::Api` / `ChromaError::Status` and transport failures to
 /// `ChromaError::Transport`.
 fn[T : @http.Transport] ChromaClient::send(
   self : ChromaClient[T],
@@ -60,12 +74,40 @@ fn[T : @http.Transport] ChromaClient::send(
     body: payload,
   }
   let response = self.transport.send(request) catch {
+    // Transports may be composed (timeout, retry), and an inner transport
+    // can raise an error this client already understands: re-raise those
+    // unchanged rather than flattening them into `Transport`, which would
+    // hide the status and the parsed message from the caller.
+    ChromaError::Api(_) as error => raise error
+    ChromaError::Status(_, _) as error => raise error
+    ChromaError::Decode(_) as error => raise error
+    ChromaError::InvalidArgument(_) as error => raise error
+    ChromaError::Transport(_) as error => raise error
     error => raise ChromaError::Transport(error.to_string())
   }
   if response.status < 200 || response.status >= 300 {
-    raise ChromaError::Status(response.status, response.body)
+    raise api_error(response.status, response.body)
   }
+  guard_response_body(response)
   response
+}
+
+///|
+/// Rejects a body the client refuses to materialize as JSON.
+///
+/// The check lives outside `send`'s parse step so every decoding path shares
+/// it, and so error responses (which are short by construction) are never
+/// rejected for size before their message can be read.
+fn guard_response_body(response : @http.Response) -> Unit raise ChromaError {
+  if response.body.length() > MAX_RESPONSE_BYTES {
+    raise ChromaError::Decode(
+      "response body is " +
+      response.body.length().to_string() +
+      " bytes, above the " +
+      MAX_RESPONSE_BYTES.to_string() +
+      " byte limit; narrow `include` or page with `limit`",
+    )
+  }
 }
 
 ///|
@@ -76,7 +118,20 @@ fn[T : @http.Transport] ChromaClient::send_json(
   path : String,
   body~ : Json = Json::null(),
 ) -> Json raise ChromaError {
-  let response = self.send(verb, path, body~)
+  self.response_json_or_null(self.send(verb, path, body~))
+}
+
+///|
+/// Parses an already-fetched response body, applying the size guard first.
+///
+/// Callers that hand the body to a hand-written decoder rather than to the
+/// generic one use this so the limit is enforced in exactly one place.
+fn[T] ChromaClient::response_json_or_null(
+  self : ChromaClient[T],
+  response : @http.Response,
+) -> Json raise ChromaError {
+  ignore(self)
+  guard_response_body(response)
   if response.body.trim().length() == 0 {
     return Json::null()
   }

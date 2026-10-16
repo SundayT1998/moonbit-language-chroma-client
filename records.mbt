@@ -189,6 +189,7 @@ pub fn[T : @http.Transport] ChromaClient::add(
   collection_id : String,
   records : Array[Record],
 ) -> Unit raise ChromaError {
+  validate_records(records)
   let items : Array[Json] = []
   for record in records {
     items.push(record.to_json())
@@ -205,6 +206,7 @@ pub fn[T : @http.Transport] ChromaClient::upsert(
   collection_id : String,
   records : Array[Record],
 ) -> Unit raise ChromaError {
+  validate_records(records)
   let items : Array[Json] = []
   for record in records {
     items.push(record.to_json())
@@ -224,6 +226,7 @@ pub fn[T : @http.Transport] ChromaClient::update(
   records : Array[Record],
   filter~ : Filter = Filter::new(),
 ) -> Unit raise ChromaError {
+  validate_records(records)
   let items : Array[Json] = []
   for record in records {
     items.push(record.to_json())
@@ -301,3 +304,49 @@ pub extend Filter with Eq::{not_equal, equal}
 
 ///|
 pub extend Filter with @debug.Debug::{to_repr}
+
+///|
+/// Rejects record batches Chroma would refuse, before a request is built.
+///
+/// Chroma answers 400 for an empty batch, a blank id, and for a record that
+/// carries neither a document nor an embedding. All three are local mistakes
+/// with local fixes, so they are caught here instead of after a round-trip.
+pub fn validate_records(records : Array[Record]) -> Unit raise ChromaError {
+  if records.length() == 0 {
+    raise ChromaError::InvalidArgument(
+      "records must not be empty; Chroma rejects a batch with no records",
+    )
+  }
+  let mut index = 0
+  for record in records {
+    if record.id == "" {
+      raise ChromaError::InvalidArgument(
+        "record at index " + index.to_string() + " has an empty id",
+      )
+    }
+    if record.document is None && record.embedding is None {
+      raise ChromaError::InvalidArgument(
+        "record " +
+        record.id +
+        " has neither a document nor an embedding; Chroma cannot store it",
+      )
+    }
+    index = index + 1
+  }
+}
+
+///|
+/// Rejects a query whose inputs would be refused server-side.
+///
+/// `label` names the field in the error message so a caller passing both
+/// texts and vectors can tell which one was empty.
+pub fn validate_query_inputs(
+  label : String,
+  inputs : Array[Json],
+) -> Unit raise ChromaError {
+  if inputs.length() == 0 {
+    raise ChromaError::InvalidArgument(
+      label + " must not be empty; a query needs at least one input",
+    )
+  }
+}

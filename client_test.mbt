@@ -131,11 +131,11 @@ test "non-2xx responses surface as a status error" {
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => ignore(client.list_collections()))
   match result {
-    Err(Status(code, body)) => {
-      assert_eq(code, 500)
-      assert_true(body.contains("boom"))
+    Err(Api(error)) => {
+      assert_eq(error.status, 500)
+      assert_eq(error.error_code, "boom")
     }
-    _ => fail("expected a Status error")
+    _ => fail("expected an Api error")
   }
 }
 

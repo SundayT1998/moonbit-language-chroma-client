@@ -73,8 +73,14 @@ pub fn[T : @http.Transport] ChromaClient::get_collection(
     "/collections/" +
     @http.encode_path_segment(name)
   let response = self.send_json(@http.Get, path) catch {
-    ChromaError::Status(404, _) => return None
-    error => raise error
+    // The server may report the miss as a bare status or as a parsed
+    // `Api` error; both mean "no such collection".
+    error =>
+      if error.status_code() == Some(404) {
+        return None
+      } else {
+        raise error
+      }
   }
   Some(Collection::from_json(response))
 }
