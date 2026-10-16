@@ -17,6 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install MoonBit
+        uses: moonbitlang/setup-moonbit@main
+
       - name: Run CI
         run: sh scripts/ci.sh
         shell: bash

@@ -143,9 +143,10 @@ The same script runs locally, on GitHub Actions and on CNB:
 sh scripts/ci.sh
 ```
 
-It installs the MoonBit toolchain when needed and then runs, in order:
-formatting, `moon check`, generated-interface freshness, tests with coverage,
-coverage reports, and debug + release builds.
+It expects `moon` on `PATH` (GitHub installs it in the workflow, CNB ships it
+in `.cnb/Dockerfile`) and then runs, in order: formatting, `moon check`,
+generated-interface freshness, tests with coverage, coverage reports, and
+debug + release builds.
 
 A single step can be run on its own, which is handy while developing:
 

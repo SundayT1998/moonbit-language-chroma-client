@@ -2,12 +2,12 @@
 # Shared CI entry point for the chroma-client module.
 #
 # GitHub Actions (.github/workflows/ci.yml) and CNB (.cnb.yml) both call this
-# script so that the checks stay identical on every platform. Running it needs
-# nothing but a POSIX shell and curl: it installs the MoonBit toolchain itself
-# when `moon` is not already on PATH.
+# script so the checks stay identical on every platform. It assumes `moon` is
+# already on PATH: GitHub installs it in the workflow, CNB bakes it into
+# .cnb/Dockerfile.
 #
 # Usage: sh scripts/ci.sh [step ...]
-#   steps: install update fmt check info test coverage build
+#   steps: update fmt check info test coverage build
 #   (default: every step, in order)
 set -eu
 
@@ -35,21 +35,9 @@ has_step() {
   return 1
 }
 
-install_toolchain() {
-  if command -v moon >/dev/null 2>&1; then
-    log "MoonBit toolchain"
-    moon version --all
-    return 0
-  fi
-  log "installing MoonBit toolchain"
-  curl -fsSL https://cli.moonbitlang.com/install/unix.sh | sh
-  PATH="${HOME}/.moon/bin:${PATH}"
-  export PATH
-  moon version --all
-}
-
 if has_step update; then
-  install_toolchain
+  log "moon version"
+  moon version --all
   log "moon update"
   moon update
 fi
