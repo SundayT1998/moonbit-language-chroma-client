@@ -1,17 +1,11 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "SundayT1998/chroma-client/cmd/main"
 
-import {
-  "SundayT1998/chroma-client",
-}
-
 // Values
 
 // Errors
 
 // Types and methods
-type AsyncHttpTransport
-pub async fn AsyncHttpTransport::send_async(Self, @chroma-client.Request) -> @chroma-client.Response
 
 // Type aliases
 

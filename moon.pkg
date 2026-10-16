@@ -1,4 +1,6 @@
 import {
+  "moonbitlang/async/http" @ah,
+  "moonbitlang/async/io" @aio,
   "moonbitlang/core/debug",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/core/encoding/utf8",
@@ -11,3 +13,15 @@ pkgtype(kind: "library")
 import {
   "moonbitlang/core/json",
 } for "test"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/env",
+} for "wbtest"
+
+options(
+  targets: {
+    "async_http_transport.mbt": [ "native", "wasm", "js" ],
+    "chroma_wbtest.mbt": [ "native", "wasm", "js" ],
+  },
+)

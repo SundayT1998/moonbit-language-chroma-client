@@ -8,7 +8,8 @@
 /// client agrees with itself.
 ///
 /// Every test returns early when `CHROMA_ENDPOINT` is unset, so the suite is
-/// a no-op off the integration job.
+/// a no-op in ordinary `moon test` runs and only does work in the CI job that
+/// starts a server.
 
 ///|
 async test "heartbeat reports a reachable server" {
@@ -48,7 +49,7 @@ async test "create_collection refuses a duplicate name" {
   ignore(client.create_collection_async(name))
   let result = try_async(() => ignore(client.create_collection_async(name)))
   match result {
-    Err(@chroma.ChromaError::Api(error)) => assert_eq(error.status, 409)
+    Err(ChromaError::Api(error)) => assert_eq(error.status, 409)
     Err(error) => fail("expected a 409 conflict, got " + error.to_string())
     Ok(_) => fail("expected a 409 conflict, but the call succeeded")
   }
@@ -61,16 +62,15 @@ async test "add stores columnar records and count reads back" {
     // A row-shaped body (`{"records": [...]}`) is rejected by the server with
     // 422, and that is exactly what the client used to send.
     client.add_async(collection.id, [
-      @chroma.Record::of_embedding("a", [1.0, 0.0, 0.0], metadata=[
-        ("topic", @chroma.MString("language")),
+      Record::of_embedding("a", [1.0, 0.0, 0.0], metadata=[
+        ("topic", MString("language")),
       ]),
-      @chroma.Record::of_embedding("b", [0.0, 1.0, 0.0]),
+      Record::of_embedding("b", [0.0, 1.0, 0.0]),
     ])
     client.add_async(collection.id, [
-      @chroma.Record::of_document("c", "a document with a vector").with_embedding([
-          0.0, 0.0, 1.0,
-        ],
-      ),
+      Record::of_document("c", "a document with a vector").with_embedding([
+        0.0, 0.0, 1.0,
+      ]),
     ])
     // `count` answers with a bare integer, not `{"count": 3}`.
     assert_eq(client.count_async(collection.id), 3)
@@ -82,11 +82,11 @@ async test "query returns ids, distances and metadata" {
   guard chroma_endpoint() is Some(_) else { return }
   with_collection("query", (client, collection) => {
     client.add_async(collection.id, [
-      @chroma.Record::of_embedding("near", [1.0, 0.0], metadata=[
-        ("kind", @chroma.MString("near")),
+      Record::of_embedding("near", [1.0, 0.0], metadata=[
+        ("kind", MString("near")),
       ]),
-      @chroma.Record::of_embedding("far", [0.0, 1.0], metadata=[
-        ("kind", @chroma.MString("far")),
+      Record::of_embedding("far", [0.0, 1.0], metadata=[
+        ("kind", MString("far")),
       ]),
     ])
     let result = client.query_embeddings_async(
@@ -107,19 +107,16 @@ async test "get filters by metadata" {
   guard chroma_endpoint() is Some(_) else { return }
   with_collection("get-filter", (client, collection) => {
     client.add_async(collection.id, [
-      @chroma.Record::of_embedding("a", [1.0, 0.0], metadata=[
-        ("topic", @chroma.MString("language")),
+      Record::of_embedding("a", [1.0, 0.0], metadata=[
+        ("topic", MString("language")),
       ]),
-      @chroma.Record::of_embedding("b", [0.0, 1.0], metadata=[
-        ("topic", @chroma.MString("database")),
+      Record::of_embedding("b", [0.0, 1.0], metadata=[
+        ("topic", MString("database")),
       ]),
     ])
     let filtered = client.get_async(
       collection.id,
-      filter=@chroma.Filter::new().with_metadata(
-        "topic",
-        @chroma.MString("language"),
-      ),
+      filter=Filter::new().with_metadata("topic", MString("language")),
     )
     assert_eq(filtered.ids, ["a"])
   })
@@ -130,8 +127,8 @@ async test "update patches only the fields it is given" {
   guard chroma_endpoint() is Some(_) else { return }
   with_collection("update", (client, collection) => {
     client.add_async(collection.id, [
-      @chroma.Record::of_embedding("a", [1.0, 0.0], metadata=[
-        ("topic", @chroma.MString("before")),
+      Record::of_embedding("a", [1.0, 0.0], metadata=[
+        ("topic", MString("before")),
       ]),
     ])
     // An update that carries only metadata must not erase the vector, which
@@ -146,7 +143,7 @@ async test "update patches only the fields it is given" {
     ])
     let fetched = client.get_async(
       collection.id,
-      filter=@chroma.Filter::new().with_limit(10),
+      filter=Filter::new().with_limit(10),
     )
     assert_eq(fetched.ids, ["a"])
     assert_eq(fetched.metadatas[0], [("topic", MString("after"))])
@@ -158,10 +155,10 @@ async test "delete removes records by id and leaves the rest" {
   guard chroma_endpoint() is Some(_) else { return }
   with_collection("delete", (client, collection) => {
     client.add_async(collection.id, [
-      @chroma.Record::of_embedding("keep", [1.0, 0.0]),
-      @chroma.Record::of_embedding("drop", [0.0, 1.0]),
+      Record::of_embedding("keep", [1.0, 0.0]),
+      Record::of_embedding("drop", [0.0, 1.0]),
     ])
-    client.delete_async(collection.id, filter=@chroma.Filter::new(ids=["drop"]))
+    client.delete_async(collection.id, filter=Filter::new(ids=["drop"]))
     assert_eq(client.count_async(collection.id), 1)
   })
 }
@@ -171,22 +168,15 @@ async test "upsert replaces an existing id" {
   guard chroma_endpoint() is Some(_) else { return }
   with_collection("upsert", (client, collection) => {
     client.add_async(collection.id, [
-      @chroma.Record::of_embedding("a", [1.0, 0.0], metadata=[
-        ("v", @chroma.MString("1")),
-      ]),
+      Record::of_embedding("a", [1.0, 0.0], metadata=[("v", MString("1"))]),
     ])
     client.upsert_async(collection.id, [
-      @chroma.Record::of_embedding("a", [0.0, 1.0], metadata=[
-        ("v", @chroma.MString("2")),
-      ]),
+      Record::of_embedding("a", [0.0, 1.0], metadata=[("v", MString("2"))]),
     ])
     // upsert must not turn a replace into an insert.
     assert_eq(client.count_async(collection.id), 1)
     assert_eq(
-      client.get_async(
-        collection.id,
-        filter=@chroma.Filter::new().with_limit(10),
-      ).metadatas[0],
+      client.get_async(collection.id, filter=Filter::new().with_limit(10)).metadatas[0],
       [("v", MString("2"))],
     )
   })
@@ -220,10 +210,10 @@ async test "an error status carries the server's message" {
   // must surface that as a parsed `Api` error rather than a bare status.
   let client = live_client()
   let result = try_async(() => {
-    client.add_async("not-a-uuid", [@chroma.Record::of_embedding("a", [1.0])])
+    client.add_async("not-a-uuid", [Record::of_embedding("a", [1.0])])
   })
   match result {
-    Err(@chroma.ChromaError::Api(error)) => {
+    Err(ChromaError::Api(error)) => {
       assert_true(error.status == 400 || error.status == 404)
       assert_true(error.message != "")
     }
@@ -235,12 +225,78 @@ async test "an error status carries the server's message" {
 ///|
 /// Runs a raising async thunk and reports the error as a `Result`.
 async fn try_async(
-  f : async () -> Unit raise @chroma.ChromaError,
-) -> Result[Unit, @chroma.ChromaError] {
+  f : async () -> Unit raise ChromaError,
+) -> Result[Unit, ChromaError] {
   try {
     f()
     Ok(())
   } catch {
     error => Err(error)
   }
+}
+
+///|
+/// The endpoint of the Chroma server under test, or `None` when the suite
+/// should be skipped.
+///
+/// These tests only run when `CHROMA_ENDPOINT` is set. That keeps
+/// `moon test` green on a laptop with no Docker daemon and on the GitHub
+/// Actions matrix (macOS and Windows do not get a Chroma container), while CI
+/// jobs that do start a server opt in by exporting the variable.
+fn chroma_endpoint() -> String? {
+  @env.get_env_var("CHROMA_ENDPOINT")
+}
+
+///|
+/// Builds a client pointed at the server under test.
+fn live_client() -> ChromaClient[AsyncHttpTransport] {
+  let endpoint = chroma_endpoint().unwrap()
+  ChromaClient::new(AsyncHttpTransport::new(), config=Config::new(endpoint~))
+}
+
+///|
+/// A collection name that no other run can collide with.
+///
+/// A shared server (the CI sidecar is one) is used by parallel tests, so the
+/// name carries a caller-supplied tag plus a run id. The tag keeps a failing
+/// test's leftovers identifiable in `list_collections`.
+fn unique_name(tag : String) -> String {
+  let suffix = match @env.get_env_var("CHROMA_TEST_RUN_ID") {
+    Some(value) if value != "" => value
+    _ => "local"
+  }
+  "chroma-client-" + tag + "-" + sanitize(suffix)
+}
+
+///|
+/// Replaces anything Chroma would reject in a collection name with `-`.
+fn sanitize(value : String) -> String {
+  let out = StringBuilder()
+  for c in value {
+    match c {
+      'a'..<='z' | 'A'..<='Z' | '0'..<='9' | '-' | '_' => out.write_char(c)
+      _ => out.write_char('-')
+    }
+  }
+  out.to_string()
+}
+
+///|
+/// Creates a collection for one test and deletes it afterwards.
+async fn with_collection(
+  tag : String,
+  body : async (ChromaClient[AsyncHttpTransport], Collection) -> Unit,
+) -> Unit {
+  let client = live_client()
+  let name = unique_name(tag)
+  // A leftover collection from an interrupted run would make the test
+  // order-dependent, so start from a known-clean slate.
+  client.delete_collection_async(name) catch {
+    _ => ()
+  }
+  let collection = client.create_collection_async(name)
+  // Cleanup must run even when the body raises, otherwise a failing test
+  // leaves a collection behind and the next run sees a different server.
+  defer (client.delete_collection_async(name) catch { _ => () })
+  body(client, collection)
 }

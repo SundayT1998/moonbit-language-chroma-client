@@ -2,10 +2,15 @@
 /// A `ChromaClient` transport backed by `moonbitlang/async/http`.
 ///
 /// This is the piece that turns the client's request objects into real
-/// sockets. It implements `@chroma.AsyncTransport`, so it plugs into the
-/// `*_async` methods, and it is deliberately thin: it maps the client's
+/// sockets. It implements `AsyncTransport`, so it plugs into the `*_async`
+/// methods, and it is deliberately thin: it maps the client's
 /// method/header vocabulary onto `@ah`, sends one request, and reads the
 /// whole body back.
+///
+/// It lives in the library rather than in a test or example package because
+/// a Chroma client that cannot reach a server is not useful: `preferred_target
+/// = "wasm"` describes where the *client* runs, and this transport is how it
+/// talks to Chroma from native and wasm alike.
 ///
 /// One connection per request is enough for a demo and for a test suite. A
 /// long-lived application that cares about latency should keep an `@ah.Client`
@@ -14,31 +19,28 @@
 ///
 /// The transport holds no state: the client already puts the full URL in
 /// every request, so there is nothing to join here.
-struct AsyncHttpTransport {}
+pub struct AsyncHttpTransport {}
 
 ///|
 /// Builds a transport.
-fn AsyncHttpTransport::new() -> AsyncHttpTransport {
+pub fn AsyncHttpTransport::new() -> AsyncHttpTransport {
   AsyncHttpTransport::{ }
 }
 
 ///|
 /// Maps the client's verb onto the HTTP stack's.
-fn to_ah_method(verb : @chroma.Method) -> @ah.RequestMethod {
+fn to_ah_method(verb : Method) -> @ah.RequestMethod {
   match verb {
-    @chroma.Get => @ah.RequestMethod::Get
-    @chroma.Post => @ah.RequestMethod::Post
-    @chroma.Put => @ah.RequestMethod::Put
-    @chroma.Delete => @ah.RequestMethod::Delete
-    @chroma.Patch => @ah.RequestMethod::Patch
+    Get => @ah.RequestMethod::Get
+    Post => @ah.RequestMethod::Post
+    Put => @ah.RequestMethod::Put
+    Delete => @ah.RequestMethod::Delete
+    Patch => @ah.RequestMethod::Patch
   }
 }
 
 ///|
-impl @chroma.AsyncTransport for AsyncHttpTransport with fn send_async(
-  self,
-  request,
-) {
+pub impl AsyncTransport for AsyncHttpTransport with fn send_async(self, request) {
   ignore(self)
   // `@ah.Headers` is a `Map[CaseInsensitiveString, String]`, and
   // `CaseInsensitiveString` is implicitly convertible from `String`, so the
@@ -48,7 +50,7 @@ impl @chroma.AsyncTransport for AsyncHttpTransport with fn send_async(
     let (key, value) = entry
     headers[key] = value
   }
-  // A GET carries no request body in the client, and `@io.Data` has no
+  // A GET carries no request body in the client, and `@aio.Data` has no
   // "absent" case, so an empty byte string is the neutral value here.
   let payload : &@aio.Data = match request.body {
     Some(body) => body
@@ -73,4 +75,4 @@ impl @chroma.AsyncTransport for AsyncHttpTransport with fn send_async(
 }
 
 ///|
-pub extend AsyncHttpTransport with @chroma.AsyncTransport::{send_async}
+pub extend AsyncHttpTransport with AsyncTransport::{send_async}
