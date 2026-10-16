@@ -270,6 +270,10 @@ async test "peek_async clamps the limit and posts to get" {
 ///|
 async test "modify_collection_async sends new_name and new_metadata" {
   let transport = ScriptedAsyncTransport::new(responses=[
+    // Resolving the name to an id costs one extra `GET`.
+    Response::json(
+      200, "{\"id\":\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\",\"name\":\"wiki\"}",
+    ),
     Response::json(200, "{}"),
   ])
   let client = ChromaClient::new(transport)
@@ -280,7 +284,9 @@ async test "modify_collection_async sends new_name and new_metadata" {
   )
   let request = transport.last_request().unwrap()
   assert_eq(request.verb, Put)
-  assert_true(request.url.has_suffix("/collections/wiki"))
+  assert_true(
+    request.url.has_suffix("/collections/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+  )
   let body = request.body.unwrap()
   assert_true(body.contains("\"new_name\":\"docs\""))
   assert_true(body.contains("\"new_metadata\""))
@@ -289,11 +295,29 @@ async test "modify_collection_async sends new_name and new_metadata" {
 ///|
 async test "modify_collection_async sends an empty body when given nothing" {
   let transport = ScriptedAsyncTransport::new(responses=[
+    Response::json(
+      200, "{\"id\":\"cccccccc-cccc-4ccc-8ccc-cccccccccccc\",\"name\":\"wiki\"}",
+    ),
     Response::json(200, "{}"),
   ])
   let client = ChromaClient::new(transport)
   client.modify_collection_async("wiki")
   assert_eq(transport.last_request().unwrap().body.unwrap(), "{}")
+}
+
+///|
+async test "modify_collection_async uses an id as-is without a lookup" {
+  let transport = ScriptedAsyncTransport::new(responses=[
+    Response::json(200, "{}"),
+  ])
+  let client = ChromaClient::new(transport)
+  client.modify_collection_async("dddddddd-dddd-4ddd-8ddd-dddddddddddd")
+  assert_eq(transport.observed().length(), 1)
+  assert_true(
+    transport.last_request().unwrap().url.has_suffix(
+      "/collections/dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    ),
+  )
 }
 
 ///|

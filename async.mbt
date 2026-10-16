@@ -339,25 +339,33 @@ pub async fn[T : AsyncTransport] ChromaClient::peek_async(
 ///|
 /// Updates a collection's name and/or metadata.
 ///
-/// `new_name` of `None` keeps the current name.
+/// `new_name` of `None` keeps the current name. `name` may be the collection's
+/// name or its id; a name is looked up first, because the server's `PUT`
+/// endpoint only accepts an id (see `resolve_collection_id`).
 pub async fn[T : AsyncTransport] ChromaClient::modify_collection_async(
   self : ChromaClient[T],
   name : String,
   new_name~ : String? = None,
   metadata~ : Metadata? = None,
 ) -> Unit raise ChromaError {
-  let body : Map[String, Json] = Map([])
-  match new_name {
-    Some(value) => body["new_name"] = Json::string(value)
-    None => ()
-  }
-  // Chroma's `UpdateCollection` model names this field `new_metadata`.
-  match metadata {
-    Some(value) => body["new_metadata"] = metadata_to_json(value)
-    None => ()
-  }
-  let path = self.database_prefix() +
-    "/collections/" +
-    encode_path_segment(name)
+  let body = modify_body(new_name, metadata)
+  let id = self.resolve_collection_id_async(name)
+  let path = self.database_prefix() + "/collections/" + encode_path_segment(id)
   ignore(self.send_json_async(Put, path, body=Json::object(body)))
+}
+
+///|
+/// The async counterpart of `resolve_collection_id`.
+async fn[T : AsyncTransport] ChromaClient::resolve_collection_id_async(
+  self : ChromaClient[T],
+  name_or_id : String,
+) -> String raise ChromaError {
+  if is_uuid_v4(name_or_id) {
+    return name_or_id
+  }
+  match self.get_collection_async(name_or_id) {
+    Some(collection) => collection.id
+    None =>
+      raise ChromaError::InvalidArgument("no such collection: " + name_or_id)
+  }
 }

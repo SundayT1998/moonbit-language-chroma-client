@@ -105,28 +105,86 @@ pub fn[T : Transport] ChromaClient::delete_collection(
 ///|
 /// Updates a collection's name and/or metadata.
 ///
-/// `new_name` of `None` keeps the current name.
+/// `new_name` of `None` keeps the current name. `name` may be the collection's
+/// name or its id; a name is looked up first, because the server's `PUT`
+/// endpoint only accepts an id.
 pub fn[T : Transport] ChromaClient::modify_collection(
   self : ChromaClient[T],
   name : String,
   new_name~ : String? = None,
   metadata~ : Metadata? = None,
 ) -> Unit raise ChromaError {
+  let body = modify_body(new_name, metadata)
+  let id = self.resolve_collection_id(name)
+  let path = self.database_prefix() + "/collections/" + encode_path_segment(id)
+  ignore(self.send_json(Put, path, body=Json::object(body)))
+}
+
+///|
+/// Builds the `UpdateCollection` body, including only the fields given.
+///
+/// Chroma's model names the metadata field `new_metadata`;
+/// sending `metadata` is silently ignored by the server.
+fn modify_body(new_name : String?, metadata : Metadata?) -> Map[String, Json] {
   let body : Map[String, Json] = Map([])
   match new_name {
     Some(value) => body["new_name"] = Json::string(value)
     None => ()
   }
-  // Chroma's `UpdateCollection` model names this field `new_metadata`;
-  // sending `metadata` is silently ignored by the server.
   match metadata {
     Some(value) => body["new_metadata"] = metadata_to_json(value)
     None => ()
   }
-  let path = self.database_prefix() +
-    "/collections/" +
-    encode_path_segment(name)
-  ignore(self.send_json(Put, path, body=Json::object(body)))
+  body
+}
+
+///|
+/// Resolves an id-or-name argument to the collection's id.
+///
+/// `PUT /collections/{id}` rejects anything that is not a UUIDv4 with a 400
+/// ("Collection ID is not a valid UUIDv4"), unlike the `GET`/`DELETE` routes
+/// below the same path, which also accept a name. Callers pass whichever they
+/// have, so a value that already looks like an id is used as-is and a name is
+/// looked up through `get_collection`.
+fn[T : Transport] ChromaClient::resolve_collection_id(
+  self : ChromaClient[T],
+  name_or_id : String,
+) -> String raise ChromaError {
+  if is_uuid_v4(name_or_id) {
+    return name_or_id
+  }
+  match self.get_collection(name_or_id) {
+    Some(collection) => collection.id
+    None =>
+      raise ChromaError::InvalidArgument("no such collection: " + name_or_id)
+  }
+}
+
+///|
+/// Whether `value` is a canonical UUIDv4 string.
+///
+/// Only the shape matters: a name can never be 36 characters of hex and
+/// hyphens in the 8-4-4-4-12 layout, so this tells the two apart without a
+/// round trip.
+fn is_uuid_v4(value : String) -> Bool {
+  if value.length() != 36 {
+    return false
+  }
+  let chars = value.to_array()
+  for i, c in chars {
+    let dash = i == 8 || i == 13 || i == 18 || i == 23
+    if dash {
+      if c != '-' {
+        return false
+      }
+    } else if !((c >= '0' && c <= '9') ||
+      (c >= 'a' && c <= 'f') ||
+      (c >= 'A' && c <= 'F')) {
+      return false
+    }
+  }
+  // The version nibble of a v4 UUID is `4`; the server checks it.
+  chars[14] == '4'
 }
 
 ///|

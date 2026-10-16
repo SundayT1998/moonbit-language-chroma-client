@@ -39,7 +39,13 @@ Body shapes matter here, and they are not what the older 0.x API used:
   envelope is accepted too;
 - `heartbeat` returns `{"nanosecond heartbeat": <int>}` and is surfaced as an
   `Int64`;
-- `modify_collection` sends `new_metadata`, not `metadata`.
+- `modify_collection` sends `new_metadata`, not `metadata`;
+- `PUT /collections/{id}` really wants a **UUID**, not a name — the `GET` and
+  `DELETE` routes below the same path accept either. `modify_collection` takes
+  a name like its neighbours, so it looks the id up first (a UUID argument
+  skips that round trip). Sending a name straight to `PUT` fails with
+  `400 InvalidArgumentError: Collection ID is not a valid UUIDv4`; only a live
+  server catches this, because a scripted response never validates the path.
 
 ## Not covered
 
