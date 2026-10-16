@@ -8,9 +8,7 @@ ARG MOONBIT_CLI=https://cli.moonbitlang.cn
 
 # deb.debian.org -> mirrors.ustc.edu.cn
 # mirrors.cloud.tencent.com -> mirrors.ustc.edu.cn
-RUN sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
-    sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources \
-    sed -i 's/mirrors.cloud.tencent.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
+RUN sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources \
     sed -i 's/mirrors.cloud.tencent.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
 
 # cnbcool/default-dev-env 预装里没有 C 编译器与 glibc 头文件，
