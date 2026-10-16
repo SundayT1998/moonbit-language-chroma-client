@@ -66,6 +66,10 @@ pub fn Response::to_repr(Self) -> @debug.Repr
 // Type aliases
 
 // Traits
+pub(open) trait AsyncTransport {
+  async fn send_async(Self, Request) -> Response
+}
+
 pub(open) trait Transport {
   fn send(Self, Request) -> Response raise
 }

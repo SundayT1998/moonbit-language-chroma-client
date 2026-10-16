@@ -24,3 +24,7 @@ keywords = [ "chroma", "vector-database", "embedding", "rag", "http-client" ]
 preferred_target = "wasm"
 
 description = "A Chroma vector database HTTP client for MoonBit: collections, records, queries and embeddings."
+
+import {
+  "moonbitlang/async@0.22.5",
+}

@@ -1,0 +1,26 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "SundayT1998/chroma-client/integration"
+
+import {
+  "SundayT1998/chroma-client",
+  "SundayT1998/chroma-client/http",
+}
+
+// Values
+pub fn chroma_endpoint() -> String?
+
+pub fn live_client() -> @chroma-client.ChromaClient[LiveTransport]
+
+pub fn unique_name(String) -> String
+
+pub async fn with_collection(String, async (@chroma-client.ChromaClient[LiveTransport], @chroma-client.Collection) -> Unit) -> Unit
+
+// Errors
+
+// Types and methods
+type LiveTransport
+pub async fn LiveTransport::send_async(Self, @http.Request) -> @http.Response
+
+// Type aliases
+
+// Traits

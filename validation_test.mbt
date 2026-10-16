@@ -37,7 +37,6 @@ test "a record with neither document nor embedding is rejected locally" {
     document: None,
     embedding: None,
     metadata: [],
-    embedding_function: None,
   }
   let result = try_catch(() => client.add("c1", [bare]))
   match result {
@@ -62,24 +61,50 @@ test "an empty record id is rejected locally" {
 ///|
 test "validate_records accepts a well-formed batch" {
   @chroma-client.validate_records([
-    @chroma-client.Record::of_document("r1", "hello"),
-    @chroma-client.Record::of_embedding("r2", [0.1]),
+    @chroma-client.Record::of_embedding("r1", [0.1]),
+    @chroma-client.Record::of_embedding("r2", [0.2]),
   ]) catch {
     _ => fail("unexpected error")
   }
 }
 
 ///|
-test "query_text rejects an empty text list" {
-  let transport = @http.MemoryTransport::new()
-  let client = @chroma-client.ChromaClient::new(transport)
-  let result = try_catch(() => ignore(client.query_text("c1", [])))
+test "validate_records rejects a document without an embedding" {
+  let result = try_catch(() => {
+    @chroma-client.validate_records([
+      @chroma-client.Record::of_document("r1", "hello"),
+    ])
+  })
   match result {
-    Err(InvalidArgument(message)) =>
-      assert_true(message.contains("query_texts"))
+    Err(InvalidArgument(message)) => {
+      assert_true(message.contains("r1"))
+      assert_true(message.contains("embedding"))
+    }
     _ => fail("expected an InvalidArgument error")
   }
-  assert_eq(transport.observed().length(), 0)
+}
+
+///|
+test "validate_records allows a missing embedding for update" {
+  // update patches by id, so a record with no vector is still meaningful:
+  // it only changes the metadata of the records it names.
+  let result = try_catch(() => {
+    @chroma-client.validate_records(
+      [
+        {
+          id: "r1",
+          document: None,
+          embedding: None,
+          metadata: [("tag", MString("x"))],
+        },
+      ],
+      require_embedding=false,
+    )
+  })
+  match result {
+    Ok(_) => ()
+    Err(error) => fail("unexpected error: " + error.to_string())
+  }
 }
 
 ///|

@@ -103,7 +103,7 @@ test "error bodies reach the caller intact on every endpoint" {
     ),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
-  let result = try_catch(() => ignore(client.query_text("c1", ["x"])))
+  let result = try_catch(() => ignore(client.query_embeddings("c1", [[1.0]])))
   match result {
     Err(Api(error)) => {
       assert_eq(error.status, 422)

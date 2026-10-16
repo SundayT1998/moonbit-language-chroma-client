@@ -10,18 +10,41 @@
     - name: ci
       script: sh scripts/ci.sh
 
+# The integration job needs a Docker daemon to start a real Chroma server, so
+# it declares the `docker` service (dind) and runs scripts/integration.sh,
+# which owns the container's lifecycle. It is a separate job rather than a
+# step inside `ci` because the default checks must stay runnable without
+# Docker, and GitHub Actions starts Chroma differently (see
+# .github/workflows/ci.yml).
+.integration: &integration
+  docker:
+    build: .cnb/Dockerfile
+  services:
+    - docker
+  runner:
+    tags: cnb:arch:amd64
+  stages:
+    - name: integration
+      script: sh scripts/integration.sh
+
 main:
   push:
     - <<: *pipeline
       name: push
+    - <<: *integration
+      name: push-integration
   pull_request:
     - <<: *pipeline
       name: pull-request
+    - <<: *integration
+      name: pull-request-integration
 
 "**":
   push:
     - <<: *pipeline
       name: push-branch
+    - <<: *integration
+      name: push-branch-integration
 
 $:
   vscode:

@@ -74,17 +74,16 @@ test "count_collections reads the count field" {
 }
 
 ///|
-test "create_collection posts the name and embedding function" {
+test "create_collection sends get_or_create false and no embedding_function" {
   let transport = @http.MemoryTransport::new(responses=[
     @http.Response::json(200, "{\"id\":\"c3\",\"name\":\"wiki\"}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let collection = client.create_collection(
     "wiki",
-    config=@chroma-client.CollectionConfig::new(
-      embedding_function=Some("default"),
-      metadata=[("purpose", MString("docs"))],
-    ),
+    config=@chroma-client.CollectionConfig::new(metadata=[
+      ("purpose", MString("docs")),
+    ]),
   )
   assert_eq(collection.id, "c3")
   assert_eq(collection.name, "wiki")
@@ -92,15 +91,28 @@ test "create_collection posts the name and embedding function" {
   assert_eq(request.verb, @http.Post)
   let body = @json.parse(request.body.unwrap())
   assert_eq(required_string(body, "name"), "wiki")
+  // Chroma's CreateCollection model has no `embedding_function` field; the
+  // old client sent one and the server ignored it.
+  assert_true(!has_field(body, "embedding_function"))
+  assert_eq(required_bool(body, "get_or_create"), false)
   let configuration = required_object(body, "configuration")
   assert_eq(
     required_string(required_object(configuration, "hnsw"), "space"),
     "l2",
   )
-  let embedding = required_object(body, "embedding_function")
-  assert_eq(required_string(embedding, "name"), "default")
   let metadata = required_object(body, "metadata")
   assert_eq(required_string(metadata, "purpose"), "docs")
+}
+
+///|
+test "get_or_create_collection sends get_or_create true" {
+  let transport = @http.MemoryTransport::new(responses=[
+    @http.Response::json(200, "{\"id\":\"c3\",\"name\":\"wiki\"}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  ignore(client.get_or_create_collection("wiki"))
+  let body = @json.parse(transport.last_request().unwrap().body.unwrap())
+  assert_eq(required_bool(body, "get_or_create"), true)
 }
 
 ///|
@@ -171,6 +183,25 @@ fn required_string(json : Json, key : String) -> String raise {
 }
 
 ///|
+fn required_bool(json : Json, key : String) -> Bool raise {
+  match required_object(json, key) {
+    Json::True => true
+    Json::False => false
+    _ => fail("field " + key + " is not a boolean")
+  }
+}
+
+///|
+/// Whether an object carries a key, used to assert that a field the old
+/// client used to send is gone rather than merely empty.
+fn has_field(json : Json, key : String) -> Bool {
+  match json {
+    Json::Object(fields) => fields.get(key) is Some(_)
+    _ => false
+  }
+}
+
+///|
 test "add serializes records with documents, embeddings and metadata" {
   let transport = @http.MemoryTransport::new(responses=[
     @http.Response::json(200, "{}"),
@@ -179,7 +210,7 @@ test "add serializes records with documents, embeddings and metadata" {
   client.add("c1", [
     @chroma-client.Record::of_document("r1", "hello", metadata=[
       ("tag", MString("greeting")),
-    ]),
+    ]).with_embedding([1.0, 0.0]),
     @chroma-client.Record::of_embedding("r2", [0.5, 0.25], metadata=[
       ("n", MInt(2)),
     ]),
@@ -188,16 +219,28 @@ test "add serializes records with documents, embeddings and metadata" {
   assert_eq(request.verb, @http.Post)
   assert_true(request.url.has_suffix("/collections/c1/add"))
   let body = @json.parse(request.body.unwrap())
-  let records = required_array(body, "records")
-  assert_eq(records.length(), 2)
-  assert_eq(required_string(records[0], "id"), "r1")
-  assert_eq(required_string(records[0], "document"), "hello")
-  assert_eq(required_string(records[1], "id"), "r2")
-  assert_eq(required_array(records[1], "embedding").length(), 2)
+  // Chroma's add model is columnar: parallel arrays aligned by index, with
+  // no `records` wrapper.
+  assert_true(!has_field(body, "records"))
+  assert_eq(required_array(body, "ids"), [
+    Json::string("r1"),
+    Json::string("r2"),
+  ])
+  assert_eq(required_array(body, "documents")[0], Json::string("hello"))
+  // r2 has no document, so its slot is a null placeholder that keeps the
+  // documents column aligned with ids.
+  assert_true(required_array(body, "documents")[1] is Json::Null)
+  let embeddings = required_array(body, "embeddings")
+  assert_eq(embeddings[0], Json::array([Json::number(1.0), Json::number(0.0)]))
+  assert_eq(embeddings[1], Json::array([Json::number(0.5), Json::number(0.25)]))
+  assert_eq(
+    required_string(required_array(body, "metadatas")[0], "tag"),
+    "greeting",
+  )
 }
 
 ///|
-test "query_text posts the query and flattens the per-query nesting" {
+test "a query flattens the per-query nesting" {
   let query_payload =
     #|{
     #|  "ids": [["r1", "r2"]],
@@ -209,7 +252,7 @@ test "query_text posts the query and flattens the per-query nesting" {
     @http.Response::json(200, query_payload),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
-  let result = client.query_text("c1", ["alpha"], n_results=2)
+  let result = client.query_embeddings("c1", [[1.0, 0.0]], n_results=2)
   assert_eq(result.ids, ["r1", "r2"])
   assert_eq(result.documents, [Some("alpha"), Some("beta")])
   assert_eq(result.distances, [Some(0.1), Some(0.2)])
@@ -217,7 +260,7 @@ test "query_text posts the query and flattens the per-query nesting" {
   // embeddings were not requested, so the field is absent from the response
   assert_eq(result.embeddings, [])
   let body = @json.parse(transport.last_request().unwrap().body.unwrap())
-  assert_eq(required_array(body, "query_texts").length(), 1)
+  assert_eq(required_array(body, "query_embeddings").length(), 1)
   assert_eq(required_array(body, "include").length(), 3)
 }
 
@@ -552,7 +595,7 @@ test "query rejects a non-positive n_results" {
   let transport = @http.MemoryTransport::new()
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => {
-    ignore(client.query_text("c1", ["x"], n_results=0))
+    ignore(client.query_embeddings("c1", [[1.0]], n_results=0))
   })
   assert_true(result is Err(InvalidArgument(_)))
   assert_eq(transport.observed().length(), 0)
@@ -567,53 +610,69 @@ test "query forwards where clauses but not the pagination window" {
   let filter = @chroma-client.Filter::new(
     where_clause=Some(@json.parse("{\"tag\":{\"$eq\":\"x\"}}")),
   )
-  ignore(client.query_text("c1", ["x"], filter~))
+  ignore(client.query_embeddings("c1", [[1.0]], filter~))
   let body = @json.parse(transport.last_request().unwrap().body.unwrap())
   assert_eq(
     body,
     @json.parse(
-      "{\"query_texts\":[\"x\"],\"n_results\":10,\"include\":[\"documents\",\"metadatas\",\"distances\"],\"where\":{\"tag\":{\"$eq\":\"x\"}}}",
+      "{\"query_embeddings\":[[1]],\"n_results\":10,\"include\":[\"documents\",\"metadatas\",\"distances\"],\"where\":{\"tag\":{\"$eq\":\"x\"}}}",
     ),
   )
 }
 
 ///|
-test "record-level embedding function override is serialized" {
+test "add refuses a document-only batch instead of sending it" {
+  // Chroma 1.x does not embed documents server-side, and its add model
+  // requires `embeddings`; a record without a vector used to be serialized
+  // as a row and rejected by the server with 422.
   let transport = @http.MemoryTransport::new(responses=[
     @http.Response::json(200, "{}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
-  let record = @chroma-client.Record::of_document("r1", "hello").with_embedding_function(
-    @json.parse("{\"name\":\"custom\"}"),
+  let result = try_catch(() => {
+    client.add("c1", [@chroma-client.Record::of_document("r1", "hello")])
+  })
+  assert_true(result is Err(InvalidArgument(_)))
+  // Nothing was sent: the batch is rejected before a request is built.
+  assert_true(transport.last_request() is None)
+}
+
+///|
+test "with_embedding makes a document-only record storable" {
+  let transport = @http.MemoryTransport::new(responses=[
+    @http.Response::json(200, "{}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  let record = @chroma-client.Record::of_document("r1", "hello").with_embedding([
+      1.0, 2.0,
+    ],
   )
   client.add("c1", [record])
   let body = @json.parse(transport.last_request().unwrap().body.unwrap())
+  assert_eq(required_array(body, "ids"), [Json::string("r1")])
   assert_eq(
-    required_object(required_array(body, "records")[0], "embedding_function"),
-    @json.parse("{\"name\":\"custom\"}"),
+    required_array(body, "embeddings")[0],
+    Json::array([Json::number(1.0), Json::number(2.0)]),
   )
+  assert_eq(required_array(body, "documents"), [Json::string("hello")])
 }
 
 ///|
-test "embedding function override requires a document" {
-  let record = @chroma-client.Record::of_embedding("r1", [1.0])
-  let config = @json.parse("{\"name\":\"custom\"}")
-  let result = try_catch(() => ignore(record.with_embedding_function(config)))
-  assert_true(result is Err(InvalidArgument(_)))
-}
-
-///|
-test "records without an override leave the field out" {
+test "update sends null for fields it does not change" {
+  // An update patches records by id, so a null column entry means "leave
+  // this alone" — which is how Chroma distinguishes it from an empty string.
   let transport = @http.MemoryTransport::new(responses=[
     @http.Response::json(200, "{}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
-  client.add("c1", [@chroma-client.Record::of_document("r1", "hello")])
+  client.update("c1", [
+    @chroma-client.Record::of_embedding("r1", [1.0], metadata=[]),
+  ])
   let body = @json.parse(transport.last_request().unwrap().body.unwrap())
-  assert_eq(
-    body,
-    @json.parse("{\"records\":[{\"id\":\"r1\",\"document\":\"hello\"}]}"),
-  )
+  assert_eq(required_array(body, "ids"), [Json::string("r1")])
+  // documents and metadatas were not supplied, so the columns are omitted.
+  assert_true(!has_field(body, "documents"))
+  assert_true(!has_field(body, "metadatas"))
 }
 
 ///|

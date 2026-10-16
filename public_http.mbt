@@ -1,12 +1,17 @@
 ///|
-/// Re-exports the transport vocabulary so applications can implement
-/// `Transport` without pulling in the `http` package directly.
+/// Re-exports the transport vocabulary so applications can implement a
+/// transport without pulling in the `http` package directly.
+///
+/// `Transport` is the synchronous trait; `AsyncTransport` is what a real HTTP
+/// stack implements, because `moonbitlang/async/http` only offers `async`
+/// functions.
 pub using @http {
   type Request,
   type Response,
   type Method,
   type MemoryTransport,
   trait Transport,
+  trait AsyncTransport,
 }
 
 ///|
