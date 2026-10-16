@@ -9,8 +9,8 @@
 /// never uses, and the request construction is short enough that duplicating
 /// the call sites is cheaper to read than a stack of higher-order helpers.
 ///
-/// Use these with `@http.AsyncTransport` (native and wasm); use the
-/// synchronous methods with `@http.Transport` (tests, and any host that
+/// Use these with `AsyncTransport` (native and wasm); use the
+/// synchronous methods with `Transport` (tests, and any host that
 /// already drives its own I/O).
 
 ///|
@@ -18,22 +18,22 @@
 ///
 /// Mirrors `ChromaClient::send`, including the pass-through of errors an
 /// inner transport already classified.
-async fn[T : @http.AsyncTransport] ChromaClient::send_async(
+async fn[T : AsyncTransport] ChromaClient::send_async(
   self : ChromaClient[T],
-  verb : @http.Method,
+  verb : Method,
   path : String,
   body~ : Json = Json::null(),
-) -> @http.Response raise ChromaError {
+) -> Response raise ChromaError {
   let headers : Map[String, String] = { "content-type": "application/json" }
   for entry in self.config.headers {
     let (key, value) = entry
     headers[key] = value
   }
   let payload = match verb {
-    @http.Get | @http.Delete => None
+    Get | Delete => None
     _ => Some(body.stringify())
   }
-  let request : @http.Request = {
+  let request : Request = {
     verb,
     url: self.api_url(path),
     headers,
@@ -56,9 +56,9 @@ async fn[T : @http.AsyncTransport] ChromaClient::send_async(
 
 ///|
 /// Sends a request and parses the response body as JSON.
-async fn[T : @http.AsyncTransport] ChromaClient::send_json_async(
+async fn[T : AsyncTransport] ChromaClient::send_json_async(
   self : ChromaClient[T],
-  verb : @http.Method,
+  verb : Method,
   path : String,
   body~ : Json = Json::null(),
 ) -> Json raise ChromaError {
@@ -67,18 +67,18 @@ async fn[T : @http.AsyncTransport] ChromaClient::send_json_async(
 
 ///|
 /// Checks that the server is reachable and returns its heartbeat timestamp.
-pub async fn[T : @http.AsyncTransport] ChromaClient::heartbeat_async(
+pub async fn[T : AsyncTransport] ChromaClient::heartbeat_async(
   self : ChromaClient[T],
 ) -> Int64 raise ChromaError {
-  self.heartbeat_value(self.send_json_async(@http.Get, "heartbeat"))
+  self.heartbeat_value(self.send_json_async(Get, "heartbeat"))
 }
 
 ///|
 /// Returns the server version string.
-pub async fn[T : @http.AsyncTransport] ChromaClient::version_async(
+pub async fn[T : AsyncTransport] ChromaClient::version_async(
   self : ChromaClient[T],
 ) -> String raise ChromaError {
-  match self.send_json_async(@http.Get, "version") {
+  match self.send_json_async(Get, "version") {
     Json::String(s) => s
     _ => ""
   }
@@ -86,11 +86,11 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::version_async(
 
 ///|
 /// Lists every collection in the configured tenant and database.
-pub async fn[T : @http.AsyncTransport] ChromaClient::list_collections_async(
+pub async fn[T : AsyncTransport] ChromaClient::list_collections_async(
   self : ChromaClient[T],
 ) -> Array[Collection] raise ChromaError {
   let response = self.send_json_async(
-    @http.Get,
+    Get,
     self.database_prefix() + "/collections",
   )
   let items = match response {
@@ -106,11 +106,11 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::list_collections_async(
 
 ///|
 /// Counts the collections in the configured tenant and database.
-pub async fn[T : @http.AsyncTransport] ChromaClient::count_collections_async(
+pub async fn[T : AsyncTransport] ChromaClient::count_collections_async(
   self : ChromaClient[T],
 ) -> Int32 raise ChromaError {
   let response = self.send_json_async(
-    @http.Get,
+    Get,
     self.database_prefix() + "/collections_count",
   )
   decode_count(response, "collections_count")
@@ -118,7 +118,7 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::count_collections_async(
 
 ///|
 /// Returns a collection handle for `name`, creating it when it is missing.
-pub async fn[T : @http.AsyncTransport] ChromaClient::get_or_create_collection_async(
+pub async fn[T : AsyncTransport] ChromaClient::get_or_create_collection_async(
   self : ChromaClient[T],
   name : String,
   config~ : CollectionConfig = CollectionConfig::new(),
@@ -126,7 +126,7 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::get_or_create_collection_as
   let path = self.database_prefix() + "/collections"
   Collection::from_json(
     self.send_json_async(
-      @http.Post,
+      Post,
       path,
       body=create_body(name, config, get_or_create=true),
     ),
@@ -135,7 +135,7 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::get_or_create_collection_as
 
 ///|
 /// Creates a collection, failing when `name` is already taken.
-pub async fn[T : @http.AsyncTransport] ChromaClient::create_collection_async(
+pub async fn[T : AsyncTransport] ChromaClient::create_collection_async(
   self : ChromaClient[T],
   name : String,
   config~ : CollectionConfig = CollectionConfig::new(),
@@ -143,7 +143,7 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::create_collection_async(
   let path = self.database_prefix() + "/collections"
   Collection::from_json(
     self.send_json_async(
-      @http.Post,
+      Post,
       path,
       body=create_body(name, config, get_or_create=false),
     ),
@@ -152,14 +152,14 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::create_collection_async(
 
 ///|
 /// Fetches an existing collection by name, returning `None` on 404.
-pub async fn[T : @http.AsyncTransport] ChromaClient::get_collection_async(
+pub async fn[T : AsyncTransport] ChromaClient::get_collection_async(
   self : ChromaClient[T],
   name : String,
 ) -> Collection? raise ChromaError {
   let path = self.database_prefix() +
     "/collections/" +
-    @http.encode_path_segment(name)
-  let response = self.send_json_async(@http.Get, path) catch {
+    encode_path_segment(name)
+  let response = self.send_json_async(Get, path) catch {
     error =>
       if error.status_code() == Some(404) {
         return None
@@ -172,59 +172,55 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::get_collection_async(
 
 ///|
 /// Deletes a collection by name.
-pub async fn[T : @http.AsyncTransport] ChromaClient::delete_collection_async(
+pub async fn[T : AsyncTransport] ChromaClient::delete_collection_async(
   self : ChromaClient[T],
   name : String,
 ) -> Unit raise ChromaError {
   let path = self.database_prefix() +
     "/collections/" +
-    @http.encode_path_segment(name)
-  ignore(self.send_json_async(@http.Delete, path))
+    encode_path_segment(name)
+  ignore(self.send_json_async(Delete, path))
 }
 
 ///|
 /// Counts the records in a collection.
-pub async fn[T : @http.AsyncTransport] ChromaClient::count_async(
+pub async fn[T : AsyncTransport] ChromaClient::count_async(
   self : ChromaClient[T],
   collection_id : String,
 ) -> Int32 raise ChromaError {
   let path = self.collection_path(collection_id) + "/count"
-  decode_count(self.send_json_async(@http.Get, path), "collections/{id}/count")
+  decode_count(self.send_json_async(Get, path), "collections/{id}/count")
 }
 
 ///|
 /// Adds records to a collection.
-pub async fn[T : @http.AsyncTransport] ChromaClient::add_async(
+pub async fn[T : AsyncTransport] ChromaClient::add_async(
   self : ChromaClient[T],
   collection_id : String,
   records : Array[Record],
 ) -> Unit raise ChromaError {
   validate_records(records)
   let path = self.collection_path(collection_id) + "/add"
-  ignore(
-    self.send_json_async(@http.Post, path, body=records_to_columns(records)),
-  )
+  ignore(self.send_json_async(Post, path, body=records_to_columns(records)))
 }
 
 ///|
 /// Inserts or replaces records by id.
-pub async fn[T : @http.AsyncTransport] ChromaClient::upsert_async(
+pub async fn[T : AsyncTransport] ChromaClient::upsert_async(
   self : ChromaClient[T],
   collection_id : String,
   records : Array[Record],
 ) -> Unit raise ChromaError {
   validate_records(records)
   let path = self.collection_path(collection_id) + "/upsert"
-  ignore(
-    self.send_json_async(@http.Post, path, body=records_to_columns(records)),
-  )
+  ignore(self.send_json_async(Post, path, body=records_to_columns(records)))
 }
 
 ///|
 /// Updates the document, metadata or embedding of existing records.
 ///
 /// Records are matched by id; ids that do not exist are ignored by Chroma.
-pub async fn[T : @http.AsyncTransport] ChromaClient::update_async(
+pub async fn[T : AsyncTransport] ChromaClient::update_async(
   self : ChromaClient[T],
   collection_id : String,
   records : Array[Record],
@@ -247,12 +243,12 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::update_async(
     None => ()
   }
   let path = self.collection_path(collection_id) + "/update"
-  ignore(self.send_json_async(@http.Post, path, body=Json::object(body)))
+  ignore(self.send_json_async(Post, path, body=Json::object(body)))
 }
 
 ///|
 /// Deletes records matching the filter.
-pub async fn[T : @http.AsyncTransport] ChromaClient::delete_async(
+pub async fn[T : AsyncTransport] ChromaClient::delete_async(
   self : ChromaClient[T],
   collection_id : String,
   filter~ : Filter = Filter::new(),
@@ -274,13 +270,13 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::delete_async(
     body["ids"] = Json::array(ids)
   }
   let path = self.collection_path(collection_id) + "/delete"
-  ignore(self.send_json_async(@http.Post, path, body=Json::object(body)))
+  ignore(self.send_json_async(Post, path, body=Json::object(body)))
 }
 
 ///|
 /// Fetches records by filter, or the whole collection when the filter is
 /// empty.
-pub async fn[T : @http.AsyncTransport] ChromaClient::get_async(
+pub async fn[T : AsyncTransport] ChromaClient::get_async(
   self : ChromaClient[T],
   collection_id : String,
   filter~ : Filter = Filter::new(),
@@ -288,13 +284,13 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::get_async(
   validate_limit_offset(filter.limit, filter.offset)
   let path = self.collection_path(collection_id) + "/get"
   QueryResult::from_json(
-    self.send_json_async(@http.Post, path, body=filter.to_json()),
+    self.send_json_async(Post, path, body=filter.to_json()),
   )
 }
 
 ///|
 /// Searches a collection with caller-supplied query vectors.
-pub async fn[T : @http.AsyncTransport] ChromaClient::query_embeddings_async(
+pub async fn[T : AsyncTransport] ChromaClient::query_embeddings_async(
   self : ChromaClient[T],
   collection_id : String,
   embeddings : Array[Embedding],
@@ -315,7 +311,7 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::query_embeddings_async(
   body["include"] = include_fields.to_json()
   append_filter(body, filter)
   let path = self.collection_path(collection_id) + "/query"
-  let response = self.send_async(@http.Post, path, body=Json::object(body))
+  let response = self.send_async(Post, path, body=Json::object(body))
   QueryResult::from_query_json(self.response_json_or_null(response))
 }
 
@@ -324,7 +320,7 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::query_embeddings_async(
 ///
 /// `limit` is capped at `peek_limit` so a stray large value cannot turn a
 /// preview into a full scan of the collection.
-pub async fn[T : @http.AsyncTransport] ChromaClient::peek_async(
+pub async fn[T : AsyncTransport] ChromaClient::peek_async(
   self : ChromaClient[T],
   collection_id : String,
   limit~ : Int32 = 10,
@@ -336,7 +332,7 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::peek_async(
   body["include"] = include_fields.to_json()
   let path = self.collection_path(collection_id) + "/get"
   QueryResult::from_json(
-    self.send_json_async(@http.Post, path, body=Json::object(body)),
+    self.send_json_async(Post, path, body=Json::object(body)),
   )
 }
 
@@ -344,7 +340,7 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::peek_async(
 /// Updates a collection's name and/or metadata.
 ///
 /// `new_name` of `None` keeps the current name.
-pub async fn[T : @http.AsyncTransport] ChromaClient::modify_collection_async(
+pub async fn[T : AsyncTransport] ChromaClient::modify_collection_async(
   self : ChromaClient[T],
   name : String,
   new_name~ : String? = None,
@@ -362,6 +358,6 @@ pub async fn[T : @http.AsyncTransport] ChromaClient::modify_collection_async(
   }
   let path = self.database_prefix() +
     "/collections/" +
-    @http.encode_path_segment(name)
-  ignore(self.send_json_async(@http.Put, path, body=Json::object(body)))
+    encode_path_segment(name)
+  ignore(self.send_json_async(Put, path, body=Json::object(body)))
 }

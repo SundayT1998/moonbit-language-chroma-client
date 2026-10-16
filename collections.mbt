@@ -1,12 +1,9 @@
 ///|
 /// Lists every collection in the configured tenant and database.
-pub fn[T : @http.Transport] ChromaClient::list_collections(
+pub fn[T : Transport] ChromaClient::list_collections(
   self : ChromaClient[T],
 ) -> Array[Collection] raise ChromaError {
-  let response = self.send_json(
-    @http.Get,
-    self.database_prefix() + "/collections",
-  )
+  let response = self.send_json(Get, self.database_prefix() + "/collections")
   let items = match response {
     Json::Array(items) => items
     _ => raise ChromaError::Decode("expected an array of collections")
@@ -20,11 +17,11 @@ pub fn[T : @http.Transport] ChromaClient::list_collections(
 
 ///|
 /// Counts the collections in the configured tenant and database.
-pub fn[T : @http.Transport] ChromaClient::count_collections(
+pub fn[T : Transport] ChromaClient::count_collections(
   self : ChromaClient[T],
 ) -> Int32 raise ChromaError {
   let response = self.send_json(
-    @http.Get,
+    Get,
     self.database_prefix() + "/collections_count",
   )
   decode_count(response, "collections_count")
@@ -35,7 +32,7 @@ pub fn[T : @http.Transport] ChromaClient::count_collections(
 ///
 /// Sends `get_or_create: true`, so calling it twice finds the collection
 /// instead of colliding on the second call.
-pub fn[T : @http.Transport] ChromaClient::get_or_create_collection(
+pub fn[T : Transport] ChromaClient::get_or_create_collection(
   self : ChromaClient[T],
   name : String,
   config~ : CollectionConfig = CollectionConfig::new(),
@@ -43,7 +40,7 @@ pub fn[T : @http.Transport] ChromaClient::get_or_create_collection(
   let path = self.database_prefix() + "/collections"
   Collection::from_json(
     self.send_json(
-      @http.Post,
+      Post,
       path,
       body=create_body(name, config, get_or_create=true),
     ),
@@ -56,7 +53,7 @@ pub fn[T : @http.Transport] ChromaClient::get_or_create_collection(
 /// Sends `get_or_create: false`, so the server answers 409 rather than
 /// silently returning a collection that may have a different
 /// configuration. Use `get_or_create_collection` when either outcome is fine.
-pub fn[T : @http.Transport] ChromaClient::create_collection(
+pub fn[T : Transport] ChromaClient::create_collection(
   self : ChromaClient[T],
   name : String,
   config~ : CollectionConfig = CollectionConfig::new(),
@@ -64,7 +61,7 @@ pub fn[T : @http.Transport] ChromaClient::create_collection(
   let path = self.database_prefix() + "/collections"
   Collection::from_json(
     self.send_json(
-      @http.Post,
+      Post,
       path,
       body=create_body(name, config, get_or_create=false),
     ),
@@ -73,14 +70,14 @@ pub fn[T : @http.Transport] ChromaClient::create_collection(
 
 ///|
 /// Fetches an existing collection by name, returning `None` on 404.
-pub fn[T : @http.Transport] ChromaClient::get_collection(
+pub fn[T : Transport] ChromaClient::get_collection(
   self : ChromaClient[T],
   name : String,
 ) -> Collection? raise ChromaError {
   let path = self.database_prefix() +
     "/collections/" +
-    @http.encode_path_segment(name)
-  let response = self.send_json(@http.Get, path) catch {
+    encode_path_segment(name)
+  let response = self.send_json(Get, path) catch {
     // The server may report the miss as a bare status or as a parsed
     // `Api` error; both mean "no such collection".
     error =>
@@ -95,21 +92,21 @@ pub fn[T : @http.Transport] ChromaClient::get_collection(
 
 ///|
 /// Deletes a collection by name.
-pub fn[T : @http.Transport] ChromaClient::delete_collection(
+pub fn[T : Transport] ChromaClient::delete_collection(
   self : ChromaClient[T],
   name : String,
 ) -> Unit raise ChromaError {
   let path = self.database_prefix() +
     "/collections/" +
-    @http.encode_path_segment(name)
-  ignore(self.send_json(@http.Delete, path))
+    encode_path_segment(name)
+  ignore(self.send_json(Delete, path))
 }
 
 ///|
 /// Updates a collection's name and/or metadata.
 ///
 /// `new_name` of `None` keeps the current name.
-pub fn[T : @http.Transport] ChromaClient::modify_collection(
+pub fn[T : Transport] ChromaClient::modify_collection(
   self : ChromaClient[T],
   name : String,
   new_name~ : String? = None,
@@ -128,18 +125,18 @@ pub fn[T : @http.Transport] ChromaClient::modify_collection(
   }
   let path = self.database_prefix() +
     "/collections/" +
-    @http.encode_path_segment(name)
-  ignore(self.send_json(@http.Put, path, body=Json::object(body)))
+    encode_path_segment(name)
+  ignore(self.send_json(Put, path, body=Json::object(body)))
 }
 
 ///|
 /// Counts the records in a collection.
-pub fn[T : @http.Transport] ChromaClient::count(
+pub fn[T : Transport] ChromaClient::count(
   self : ChromaClient[T],
   collection_id : String,
 ) -> Int32 raise ChromaError {
   let path = self.collection_path(collection_id) + "/count"
-  decode_count(self.send_json(@http.Get, path), "collections/{id}/count")
+  decode_count(self.send_json(Get, path), "collections/{id}/count")
 }
 
 ///|
@@ -147,7 +144,7 @@ pub fn[T : @http.Transport] ChromaClient::count(
 ///
 /// `limit` is capped at `peek_limit` so a stray large value cannot turn a
 /// preview into a full scan of the collection.
-pub fn[T : @http.Transport] ChromaClient::peek(
+pub fn[T : Transport] ChromaClient::peek(
   self : ChromaClient[T],
   collection_id : String,
   limit~ : Int32 = 10,
@@ -158,9 +155,7 @@ pub fn[T : @http.Transport] ChromaClient::peek(
   body["limit"] = Json::number(limit.to_double())
   body["include"] = include_fields.to_json()
   let path = self.collection_path(collection_id) + "/get"
-  QueryResult::from_json(
-    self.send_json(@http.Post, path, body=Json::object(body)),
-  )
+  QueryResult::from_json(self.send_json(Post, path, body=Json::object(body)))
 }
 
 ///|

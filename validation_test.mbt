@@ -1,6 +1,6 @@
 ///|
 test "add rejects an empty batch without sending anything" {
-  let transport = @http.MemoryTransport::new()
+  let transport = @chroma-client.MemoryTransport::new()
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => client.add("c1", []))
   match result {
@@ -12,7 +12,7 @@ test "add rejects an empty batch without sending anything" {
 
 ///|
 test "upsert rejects an empty batch" {
-  let transport = @http.MemoryTransport::new()
+  let transport = @chroma-client.MemoryTransport::new()
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => client.upsert("c1", []))
   assert_true(result is Err(InvalidArgument(_)))
@@ -21,7 +21,7 @@ test "upsert rejects an empty batch" {
 
 ///|
 test "update rejects an empty batch" {
-  let transport = @http.MemoryTransport::new()
+  let transport = @chroma-client.MemoryTransport::new()
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => client.update("c1", []))
   assert_true(result is Err(InvalidArgument(_)))
@@ -30,7 +30,7 @@ test "update rejects an empty batch" {
 
 ///|
 test "a record with neither document nor embedding is rejected locally" {
-  let transport = @http.MemoryTransport::new()
+  let transport = @chroma-client.MemoryTransport::new()
   let client = @chroma-client.ChromaClient::new(transport)
   let bare : @chroma-client.Record = {
     id: "r1",
@@ -50,7 +50,7 @@ test "a record with neither document nor embedding is rejected locally" {
 
 ///|
 test "an empty record id is rejected locally" {
-  let transport = @http.MemoryTransport::new()
+  let transport = @chroma-client.MemoryTransport::new()
   let client = @chroma-client.ChromaClient::new(transport)
   let record = @chroma-client.Record::of_document("", "hello")
   let result = try_catch(() => client.add("c1", [record]))
@@ -109,7 +109,7 @@ test "validate_records allows a missing embedding for update" {
 
 ///|
 test "query_embeddings rejects an empty vector list" {
-  let transport = @http.MemoryTransport::new()
+  let transport = @chroma-client.MemoryTransport::new()
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => ignore(client.query_embeddings("c1", [])))
   match result {
@@ -124,8 +124,8 @@ test "query_embeddings rejects an empty vector list" {
 test "a response above the size limit is reported, not truncated" {
   // one byte past the limit, built without allocating it twice
   let body = "[" + " ".repeat(@chroma-client.MAX_RESPONSE_BYTES) + "]"
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, body),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, body),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => ignore(client.get("c1")))
@@ -137,8 +137,8 @@ test "a response above the size limit is reported, not truncated" {
 
 ///|
 test "a response far below the limit still decodes" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"ids\":[\"r1\"]}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"ids\":[\"r1\"]}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   assert_eq(client.get("c1").ids, ["r1"])
@@ -149,8 +149,8 @@ test "a large error body still surfaces its message" {
   // error bodies are read before any size guard, so a long one still parses
   let padding = "x".repeat(1024)
   let body = "{\"error\":\"InternalError\",\"message\":\"" + padding + "\"}"
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(500, body),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(500, body),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => ignore(client.count_collections()))

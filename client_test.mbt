@@ -48,15 +48,15 @@ test "collection requires id and name" {
 ///|
 test "list_collections builds a v2 request and decodes the array" {
   let collections_payload = "[{\"id\":\"c1\",\"name\":\"notes\"},{\"id\":\"c2\",\"name\":\"docs\"}]"
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, collections_payload),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, collections_payload),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let collections = client.list_collections()
   assert_eq(collections.length(), 2)
   assert_eq(collections[0].name, "notes")
   let request = transport.last_request().unwrap()
-  assert_eq(request.verb, @http.Get)
+  assert_eq(request.verb, Get)
   assert_eq(
     request.url,
     "http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections",
@@ -66,8 +66,8 @@ test "list_collections builds a v2 request and decodes the array" {
 
 ///|
 test "count_collections reads the count field" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"count\": 4}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"count\": 4}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   assert_eq(client.count_collections(), 4)
@@ -75,8 +75,8 @@ test "count_collections reads the count field" {
 
 ///|
 test "create_collection sends get_or_create false and no embedding_function" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"id\":\"c3\",\"name\":\"wiki\"}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"id\":\"c3\",\"name\":\"wiki\"}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let collection = client.create_collection(
@@ -88,7 +88,7 @@ test "create_collection sends get_or_create false and no embedding_function" {
   assert_eq(collection.id, "c3")
   assert_eq(collection.name, "wiki")
   let request = transport.last_request().unwrap()
-  assert_eq(request.verb, @http.Post)
+  assert_eq(request.verb, Post)
   let body = @json.parse(request.body.unwrap())
   assert_eq(required_string(body, "name"), "wiki")
   // Chroma's CreateCollection model has no `embedding_function` field; the
@@ -106,8 +106,8 @@ test "create_collection sends get_or_create false and no embedding_function" {
 
 ///|
 test "get_or_create_collection sends get_or_create true" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"id\":\"c3\",\"name\":\"wiki\"}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"id\":\"c3\",\"name\":\"wiki\"}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   ignore(client.get_or_create_collection("wiki"))
@@ -117,8 +117,8 @@ test "get_or_create_collection sends get_or_create true" {
 
 ///|
 test "get_collection returns None on 404" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(404, "{\"error\":\"not found\"}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(404, "{\"error\":\"not found\"}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   assert_true(client.get_collection("missing") is None)
@@ -126,8 +126,8 @@ test "get_collection returns None on 404" {
 
 ///|
 test "get_collection percent-encodes the name" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"id\":\"c1\",\"name\":\"my notes\"}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"id\":\"c1\",\"name\":\"my notes\"}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let collection = client.get_collection("my notes").unwrap()
@@ -137,8 +137,8 @@ test "get_collection percent-encodes the name" {
 
 ///|
 test "non-2xx responses surface as a status error" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(500, "{\"error\":\"boom\"}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(500, "{\"error\":\"boom\"}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => ignore(client.list_collections()))
@@ -153,8 +153,8 @@ test "non-2xx responses surface as a status error" {
 
 ///|
 test "invalid json bodies surface as a decode error" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "not json"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "not json"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => ignore(client.list_collections()))
@@ -203,8 +203,8 @@ fn has_field(json : Json, key : String) -> Bool {
 
 ///|
 test "add serializes records with documents, embeddings and metadata" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   client.add("c1", [
@@ -216,7 +216,7 @@ test "add serializes records with documents, embeddings and metadata" {
     ]),
   ])
   let request = transport.last_request().unwrap()
-  assert_eq(request.verb, @http.Post)
+  assert_eq(request.verb, Post)
   assert_true(request.url.has_suffix("/collections/c1/add"))
   let body = @json.parse(request.body.unwrap())
   // Chroma's add model is columnar: parallel arrays aligned by index, with
@@ -248,8 +248,8 @@ test "a query flattens the per-query nesting" {
     #|  "metadatas": [[{"tag": "x"}, {"tag": "y"}]],
     #|  "distances": [[0.1, 0.2]]
     #|}
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, query_payload),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, query_payload),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let result = client.query_embeddings("c1", [[1.0, 0.0]], n_results=2)
@@ -266,8 +266,8 @@ test "a query flattens the per-query nesting" {
 
 ///|
 test "query_embeddings sends vectors directly" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(
       200, "{\"ids\":[[\"r1\"]],\"embeddings\":[[[1.0,2.0]]]}",
     ),
   ])
@@ -286,8 +286,8 @@ test "query_embeddings sends vectors directly" {
 
 ///|
 test "filter builds a where clause and a limit" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"ids\":[\"r1\"]}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"ids\":[\"r1\"]}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let filter = @chroma-client.Filter::new()
@@ -303,8 +303,8 @@ test "filter builds a where clause and a limit" {
 
 ///|
 test "delete sends ids and where clauses" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   client.delete("c1", filter=@chroma-client.Filter::new(ids=["r1", "r2"]))
@@ -314,9 +314,9 @@ test "delete sends ids and where clauses" {
 
 ///|
 test "heartbeat and version read scalar responses" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "1234"),
-    @http.Response::json(200, "\"1.0.0\""),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "1234"),
+    @chroma-client.Response::json(200, "\"1.0.0\""),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   assert_eq(client.heartbeat(), 1234)
@@ -325,8 +325,8 @@ test "heartbeat and version read scalar responses" {
 
 ///|
 test "config customisation changes the api prefix" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"count\":0}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"count\":0}"),
   ])
   let client = @chroma-client.ChromaClient::new(
     transport,
@@ -345,8 +345,8 @@ test "config customisation changes the api prefix" {
 
 ///|
 test "custom headers are merged into every request" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"count\":0}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"count\":0}"),
   ])
   let client = @chroma-client.ChromaClient::new(
     transport,
@@ -392,7 +392,7 @@ fn FailingTransport::new() -> FailingTransport {
 }
 
 ///|
-impl @http.Transport for FailingTransport with fn send(self, _) {
+impl Transport for FailingTransport with fn send(self, _) {
   raise Failure::Failure("connection refused " + self.marker.to_string())
 }
 
@@ -426,8 +426,8 @@ test "with_token and with_basic_auth stamp the authorization header" {
 
 ///|
 test "authentication headers reach every request" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"count\":0}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"count\":0}"),
   ])
   let client = @chroma-client.ChromaClient::new(
     transport,
@@ -460,8 +460,8 @@ test "with_token overrides an earlier Authorization header" {
 
 ///|
 test "timeout transport stamps the deadline header" {
-  let inner = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"count\":0}"),
+  let inner = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"count\":0}"),
   ])
   let client = @chroma-client.ChromaClient::new(
     @chroma-client.TimeoutTransport::new(inner, 5000),
@@ -473,8 +473,8 @@ test "timeout transport stamps the deadline header" {
 
 ///|
 test "timeout transport passes requests through when disabled" {
-  let inner = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"count\":0}"),
+  let inner = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"count\":0}"),
   ])
   let client = @chroma-client.ChromaClient::new(
     @chroma-client.TimeoutTransport::from_config(
@@ -491,20 +491,20 @@ test "timeout transport passes requests through when disabled" {
 
 ///|
 test "count reads the collection record count" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"count\": 17}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"count\": 17}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   assert_eq(client.count("c1"), 17)
   let request = transport.last_request().unwrap()
-  assert_eq(request.verb, @http.Get)
+  assert_eq(request.verb, Get)
   assert_true(request.url.has_suffix("/collections/c1/count"))
 }
 
 ///|
 test "peek posts a bounded limit and decodes a flat result" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(
       200, "{\"ids\":[\"r1\",\"r2\"],\"documents\":[\"a\",\"b\"]}",
     ),
   ])
@@ -522,9 +522,9 @@ test "peek posts a bounded limit and decodes a flat result" {
 
 ///|
 test "peek clamps out-of-range limits" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"ids\":[]}"),
-    @http.Response::json(200, "{\"ids\":[]}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"ids\":[]}"),
+    @chroma-client.Response::json(200, "{\"ids\":[]}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   ignore(client.peek("c1", limit=0))
@@ -548,7 +548,7 @@ test "peek clamps out-of-range limits" {
 
 ///|
 test "get rejects an offset that is not smaller than the limit" {
-  let transport = @http.MemoryTransport::new()
+  let transport = @chroma-client.MemoryTransport::new()
   let client = @chroma-client.ChromaClient::new(transport)
   let filter = @chroma-client.Filter::new(limit=Some(10), offset=Some(10))
   let result = try_catch(() => ignore(client.get("c1", filter~)))
@@ -559,8 +559,8 @@ test "get rejects an offset that is not smaller than the limit" {
 
 ///|
 test "get accepts an offset smaller than the limit" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"ids\":[\"r1\"]}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"ids\":[\"r1\"]}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let filter = @chroma-client.Filter::new(limit=Some(10), offset=Some(5))
@@ -571,8 +571,8 @@ test "get accepts an offset smaller than the limit" {
 
 ///|
 test "get tolerates an offset without a limit" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"ids\":[]}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"ids\":[]}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let filter = @chroma-client.Filter::new(offset=Some(99))
@@ -582,8 +582,8 @@ test "get tolerates an offset without a limit" {
 
 ///|
 test "get reports a missing ids field as a decode error" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"documents\":[\"a\"]}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"documents\":[\"a\"]}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => ignore(client.get("c1")))
@@ -592,7 +592,7 @@ test "get reports a missing ids field as a decode error" {
 
 ///|
 test "query rejects a non-positive n_results" {
-  let transport = @http.MemoryTransport::new()
+  let transport = @chroma-client.MemoryTransport::new()
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => {
     ignore(client.query_embeddings("c1", [[1.0]], n_results=0))
@@ -603,8 +603,8 @@ test "query rejects a non-positive n_results" {
 
 ///|
 test "query forwards where clauses but not the pagination window" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{\"ids\":[[\"r1\"]]}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"ids\":[[\"r1\"]]}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let filter = @chroma-client.Filter::new(
@@ -625,8 +625,8 @@ test "add refuses a document-only batch instead of sending it" {
   // Chroma 1.x does not embed documents server-side, and its add model
   // requires `embeddings`; a record without a vector used to be serialized
   // as a row and rejected by the server with 422.
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => {
@@ -639,8 +639,8 @@ test "add refuses a document-only batch instead of sending it" {
 
 ///|
 test "with_embedding makes a document-only record storable" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let record = @chroma-client.Record::of_document("r1", "hello").with_embedding([
@@ -661,8 +661,8 @@ test "with_embedding makes a document-only record storable" {
 test "update sends null for fields it does not change" {
   // An update patches records by id, so a null column entry means "leave
   // this alone" — which is how Chroma distinguishes it from an empty string.
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(200, "{}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   client.update("c1", [

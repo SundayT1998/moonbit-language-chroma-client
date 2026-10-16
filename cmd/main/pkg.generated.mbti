@@ -2,7 +2,7 @@
 package "SundayT1998/chroma-client/cmd/main"
 
 import {
-  "SundayT1998/chroma-client/http",
+  "SundayT1998/chroma-client",
 }
 
 // Values
@@ -10,8 +10,8 @@ import {
 // Errors
 
 // Types and methods
-type DemoTransport
-pub fn DemoTransport::send(Self, @http.Request) -> @http.Response raise
+type AsyncHttpTransport
+pub async fn AsyncHttpTransport::send_async(Self, @chroma-client.Request) -> @chroma-client.Response
 
 // Type aliases
 

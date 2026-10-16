@@ -3,7 +3,7 @@
 ///
 /// The client is generic over its transport so applications can plug in any
 /// HTTP implementation, and tests can use
-/// `@http.MemoryTransport`. It is otherwise stateless: every call is a plain
+/// `MemoryTransport`. It is otherwise stateless: every call is a plain
 /// HTTP request.
 pub(all) struct ChromaClient[T] {
   transport : T
@@ -22,15 +22,15 @@ pub fn[T] ChromaClient::new(
 ///|
 /// Builds the URL for a versioned API path, e.g. `/collections`.
 fn[T] ChromaClient::api_url(self : ChromaClient[T], path : String) -> String {
-  @http.join_url(self.config.endpoint, "/api/v2/" + path)
+  join_url(self.config.endpoint, "/api/v2/" + path)
 }
 
 ///|
 /// The `/tenants/{tenant}/databases/{database}` prefix shared by every
 /// resource endpoint, with dynamic segments percent-encoded.
 fn[T] ChromaClient::database_prefix(self : ChromaClient[T]) -> String {
-  let tenant = @http.encode_path_segment(self.config.tenant)
-  let database = @http.encode_path_segment(self.config.database)
+  let tenant = encode_path_segment(self.config.tenant)
+  let database = encode_path_segment(self.config.database)
   "tenants/" + tenant + "/databases/" + database
 }
 
@@ -52,22 +52,22 @@ pub const MAX_RESPONSE_BYTES : Int32 = 32 * 1024 * 1024
 /// Sends a request through the transport, mapping non-2xx responses to
 /// `ChromaError::Api` / `ChromaError::Status` and transport failures to
 /// `ChromaError::Transport`.
-fn[T : @http.Transport] ChromaClient::send(
+fn[T : Transport] ChromaClient::send(
   self : ChromaClient[T],
-  verb : @http.Method,
+  verb : Method,
   path : String,
   body~ : Json = Json::null(),
-) -> @http.Response raise ChromaError {
+) -> Response raise ChromaError {
   let headers : Map[String, String] = { "content-type": "application/json" }
   for entry in self.config.headers {
     let (key, value) = entry
     headers[key] = value
   }
   let payload = match verb {
-    @http.Get | @http.Delete => None
+    Get | Delete => None
     _ => Some(body.stringify())
   }
-  let request : @http.Request = {
+  let request : Request = {
     verb,
     url: self.api_url(path),
     headers,
@@ -98,7 +98,7 @@ fn[T : @http.Transport] ChromaClient::send(
 /// The check lives outside `send`'s parse step so every decoding path shares
 /// it, and so error responses (which are short by construction) are never
 /// rejected for size before their message can be read.
-fn guard_response_body(response : @http.Response) -> Unit raise ChromaError {
+fn guard_response_body(response : Response) -> Unit raise ChromaError {
   if response.body.length() > MAX_RESPONSE_BYTES {
     raise ChromaError::Decode(
       "response body is " +
@@ -112,9 +112,9 @@ fn guard_response_body(response : @http.Response) -> Unit raise ChromaError {
 
 ///|
 /// Sends a request and parses the response body as JSON.
-fn[T : @http.Transport] ChromaClient::send_json(
+fn[T : Transport] ChromaClient::send_json(
   self : ChromaClient[T],
-  verb : @http.Method,
+  verb : Method,
   path : String,
   body~ : Json = Json::null(),
 ) -> Json raise ChromaError {
@@ -128,7 +128,7 @@ fn[T : @http.Transport] ChromaClient::send_json(
 /// generic one use this so the limit is enforced in exactly one place.
 fn[T] ChromaClient::response_json_or_null(
   self : ChromaClient[T],
-  response : @http.Response,
+  response : Response,
 ) -> Json raise ChromaError {
   ignore(self)
   guard_response_body(response)
@@ -240,9 +240,7 @@ fn[T] ChromaClient::collection_path(
   self : ChromaClient[T],
   collection_id : String,
 ) -> String {
-  self.database_prefix() +
-  "/collections/" +
-  @http.encode_path_segment(collection_id)
+  self.database_prefix() + "/collections/" + encode_path_segment(collection_id)
 }
 
 ///|
@@ -253,10 +251,10 @@ fn[T] ChromaClient::collection_path(
 /// a server that answers with a bare number (or with an unexpected shape) is
 /// accepted too, since the point of the call is reachability rather than the
 /// timestamp itself.
-pub fn[T : @http.Transport] ChromaClient::heartbeat(
+pub fn[T : Transport] ChromaClient::heartbeat(
   self : ChromaClient[T],
 ) -> Int64 raise ChromaError {
-  self.heartbeat_value(self.send_json(@http.Get, "heartbeat"))
+  self.heartbeat_value(self.send_json(Get, "heartbeat"))
 }
 
 ///|
@@ -297,10 +295,10 @@ fn[T] ChromaClient::heartbeat_value(
 
 ///|
 /// Returns the server version string.
-pub fn[T : @http.Transport] ChromaClient::version(
+pub fn[T : Transport] ChromaClient::version(
   self : ChromaClient[T],
 ) -> String raise ChromaError {
-  let response = self.send_json(@http.Get, "version")
+  let response = self.send_json(Get, "version")
   match response {
     Json::String(s) => s
     _ => ""

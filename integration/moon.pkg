@@ -3,7 +3,6 @@ import {
   "moonbitlang/async/io" @aio,
   "moonbitlang/core/env",
   "SundayT1998/chroma-client" @chroma,
-  "SundayT1998/chroma-client/http" @chttp,
 }
 
 pkgtype(kind: "library")

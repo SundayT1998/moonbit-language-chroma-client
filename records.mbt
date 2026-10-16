@@ -202,33 +202,33 @@ fn Filter::to_json(self : Filter) -> Json {
 ///
 /// Every record must carry either a `document` or an `embedding`, otherwise
 /// Chroma rejects the request.
-pub fn[T : @http.Transport] ChromaClient::add(
+pub fn[T : Transport] ChromaClient::add(
   self : ChromaClient[T],
   collection_id : String,
   records : Array[Record],
 ) -> Unit raise ChromaError {
   validate_records(records)
   let path = self.collection_path(collection_id) + "/add"
-  ignore(self.send_json(@http.Post, path, body=records_to_columns(records)))
+  ignore(self.send_json(Post, path, body=records_to_columns(records)))
 }
 
 ///|
 /// Inserts or replaces records by id.
-pub fn[T : @http.Transport] ChromaClient::upsert(
+pub fn[T : Transport] ChromaClient::upsert(
   self : ChromaClient[T],
   collection_id : String,
   records : Array[Record],
 ) -> Unit raise ChromaError {
   validate_records(records)
   let path = self.collection_path(collection_id) + "/upsert"
-  ignore(self.send_json(@http.Post, path, body=records_to_columns(records)))
+  ignore(self.send_json(Post, path, body=records_to_columns(records)))
 }
 
 ///|
 /// Updates the document, metadata or embedding of existing records.
 ///
 /// Records are matched by id; ids that do not exist are ignored by Chroma.
-pub fn[T : @http.Transport] ChromaClient::update(
+pub fn[T : Transport] ChromaClient::update(
   self : ChromaClient[T],
   collection_id : String,
   records : Array[Record],
@@ -252,13 +252,13 @@ pub fn[T : @http.Transport] ChromaClient::update(
     None => ()
   }
   let path = self.collection_path(collection_id) + "/update"
-  ignore(self.send_json(@http.Post, path, body=Json::object(body)))
+  ignore(self.send_json(Post, path, body=Json::object(body)))
 }
 
 ///|
 /// Deletes records matching the filter. With an empty filter Chroma
 /// deletes every record in the collection.
-pub fn[T : @http.Transport] ChromaClient::delete(
+pub fn[T : Transport] ChromaClient::delete(
   self : ChromaClient[T],
   collection_id : String,
   filter~ : Filter = Filter::new(),
@@ -280,13 +280,13 @@ pub fn[T : @http.Transport] ChromaClient::delete(
     body["ids"] = Json::array(ids)
   }
   let path = self.collection_path(collection_id) + "/delete"
-  ignore(self.send_json(@http.Post, path, body=Json::object(body)))
+  ignore(self.send_json(Post, path, body=Json::object(body)))
 }
 
 ///|
 /// Fetches records by filter, or the whole collection when the filter is
 /// empty.
-pub fn[T : @http.Transport] ChromaClient::get(
+pub fn[T : Transport] ChromaClient::get(
   self : ChromaClient[T],
   collection_id : String,
   filter~ : Filter = Filter::new(),
@@ -294,7 +294,7 @@ pub fn[T : @http.Transport] ChromaClient::get(
   validate_limit_offset(filter.limit, filter.offset)
   let body = filter.to_json()
   let path = self.collection_path(collection_id) + "/get"
-  QueryResult::from_json(self.send_json(@http.Post, path, body~))
+  QueryResult::from_json(self.send_json(Post, path, body~))
 }
 
 ///|

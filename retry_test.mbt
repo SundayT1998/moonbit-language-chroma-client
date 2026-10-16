@@ -1,8 +1,8 @@
 ///|
 test "retry is off by default" {
-  let inner = @http.MemoryTransport::new(responses=[
-    @http.Response::json(500, "{\"error\":\"InternalError\"}"),
-    @http.Response::json(200, "{\"count\":1}"),
+  let inner = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(500, "{\"error\":\"InternalError\"}"),
+    @chroma-client.Response::json(200, "{\"count\":1}"),
   ])
   let transport = @chroma-client.RetryTransport::new(inner)
   let client = @chroma-client.ChromaClient::new(transport)
@@ -14,10 +14,10 @@ test "retry is off by default" {
 
 ///|
 test "enabled retry re-sends 5xx until it succeeds" {
-  let inner = @http.MemoryTransport::new(responses=[
-    @http.Response::json(503, "{\"error\":\"Unavailable\"}"),
-    @http.Response::json(500, "{\"error\":\"InternalError\"}"),
-    @http.Response::json(200, "{\"count\":7}"),
+  let inner = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(503, "{\"error\":\"Unavailable\"}"),
+    @chroma-client.Response::json(500, "{\"error\":\"InternalError\"}"),
+    @chroma-client.Response::json(200, "{\"count\":7}"),
   ])
   let transport = @chroma-client.RetryTransport::new(
     inner,
@@ -30,9 +30,9 @@ test "enabled retry re-sends 5xx until it succeeds" {
 
 ///|
 test "retry re-sends 429 and reports each attempt" {
-  let inner = @http.MemoryTransport::new(responses=[
-    @http.Response::json(429, "{\"error\":\"TooManyRequests\"}"),
-    @http.Response::json(200, "{\"ids\":[]}"),
+  let inner = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(429, "{\"error\":\"TooManyRequests\"}"),
+    @chroma-client.Response::json(200, "{\"ids\":[]}"),
   ])
   let attempts : Ref[Int32] = { val: 0, }
   let delays : Ref[Int32] = { val: 0, }
@@ -52,10 +52,10 @@ test "retry re-sends 429 and reports each attempt" {
 ///|
 test "retry gives up after max_attempts and returns the last error" {
   // the third response is a success, but max_attempts=2 stops before it
-  let inner = @http.MemoryTransport::new(responses=[
-    @http.Response::json(500, "{\"error\":\"InternalError\"}"),
-    @http.Response::json(500, "{\"error\":\"InternalError\"}"),
-    @http.Response::json(200, "{\"count\":3}"),
+  let inner = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(500, "{\"error\":\"InternalError\"}"),
+    @chroma-client.Response::json(500, "{\"error\":\"InternalError\"}"),
+    @chroma-client.Response::json(200, "{\"count\":3}"),
   ])
   let transport = @chroma-client.RetryTransport::new(
     inner,
@@ -69,8 +69,8 @@ test "retry gives up after max_attempts and returns the last error" {
 
 ///|
 test "retry does not re-send deterministic client errors" {
-  let inner = @http.MemoryTransport::new(responses=[
-    @http.Response::json(400, "{\"error\":\"BadRequest\"}"),
+  let inner = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(400, "{\"error\":\"BadRequest\"}"),
   ])
   let transport = @chroma-client.RetryTransport::new(
     inner,
@@ -84,9 +84,9 @@ test "retry does not re-send deterministic client errors" {
 
 ///|
 test "retry stamps the delay header for the next attempt" {
-  let inner = @http.MemoryTransport::new(responses=[
-    @http.Response::json(500, "{\"error\":\"InternalError\"}"),
-    @http.Response::json(200, "{\"count\":1}"),
+  let inner = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(500, "{\"error\":\"InternalError\"}"),
+    @chroma-client.Response::json(200, "{\"count\":1}"),
   ])
   let transport = @chroma-client.RetryTransport::new(
     inner,
@@ -135,9 +135,9 @@ test "retry policy clamps nonsensical settings" {
 
 ///|
 test "retry composes with the timeout transport" {
-  let inner = @http.MemoryTransport::new(responses=[
-    @http.Response::json(500, "{\"error\":\"InternalError\"}"),
-    @http.Response::json(200, "{\"count\":1}"),
+  let inner = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(500, "{\"error\":\"InternalError\"}"),
+    @chroma-client.Response::json(200, "{\"count\":1}"),
   ])
   let transport = @chroma-client.RetryTransport::new(
     @chroma-client.TimeoutTransport::new(inner, 4000),
@@ -157,8 +157,10 @@ test "retry composes with the timeout transport" {
 test "an inner transport's parsed error is not flattened into Transport" {
   // A composed transport raises `Api`; the client must not rebrand it as a
   // transport failure, or the caller loses the status and the message.
-  let inner = @http.MemoryTransport::new(responses=[
-    @http.Response::json(404, "{\"error\":\"NotFound\",\"message\":\"gone\"}"),
+  let inner = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(
+      404, "{\"error\":\"NotFound\",\"message\":\"gone\"}",
+    ),
   ])
   let transport = @chroma-client.RetryTransport::new(
     inner,
@@ -169,8 +171,10 @@ test "an inner transport's parsed error is not flattened into Transport" {
   // get_collection turns a 404 into None, so nothing is raised here
   assert_true(result is Ok(_))
 
-  let missing = @http.MemoryTransport::new(responses=[
-    @http.Response::json(409, "{\"error\":\"Conflict\",\"message\":\"exists\"}"),
+  let missing = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(
+      409, "{\"error\":\"Conflict\",\"message\":\"exists\"}",
+    ),
   ])
   let client = @chroma-client.ChromaClient::new(
     @chroma-client.RetryTransport::new(

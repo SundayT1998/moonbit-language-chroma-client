@@ -87,8 +87,8 @@ test "Show renders the parsed error without the raw body wrapper" {
 
 ///|
 test "get_collection still reports non-404 failures" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(500, "{\"error\":\"InternalError\"}"),
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(500, "{\"error\":\"InternalError\"}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
   let result = try_catch(() => ignore(client.get_collection("notes")))
@@ -97,8 +97,8 @@ test "get_collection still reports non-404 failures" {
 
 ///|
 test "error bodies reach the caller intact on every endpoint" {
-  let transport = @http.MemoryTransport::new(responses=[
-    @http.Response::json(
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(
       422, "{\"error\":\"UnprocessableEntity\",\"message\":\"bad embedding\"}",
     ),
   ])

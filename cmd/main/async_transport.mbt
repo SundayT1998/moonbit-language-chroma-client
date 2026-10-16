@@ -2,7 +2,7 @@
 /// A `ChromaClient` transport backed by `moonbitlang/async/http`.
 ///
 /// This is the piece that turns the client's request objects into real
-/// sockets. It implements `@chttp.AsyncTransport`, so it plugs into the
+/// sockets. It implements `@chroma.AsyncTransport`, so it plugs into the
 /// `*_async` methods, and it is deliberately thin: it maps the client's
 /// method/header vocabulary onto `@ah`, sends one request, and reads the
 /// whole body back.
@@ -24,18 +24,18 @@ fn AsyncHttpTransport::new() -> AsyncHttpTransport {
 
 ///|
 /// Maps the client's verb onto the HTTP stack's.
-fn to_ah_method(verb : @chttp.Method) -> @ah.RequestMethod {
+fn to_ah_method(verb : @chroma.Method) -> @ah.RequestMethod {
   match verb {
-    @chttp.Get => @ah.RequestMethod::Get
-    @chttp.Post => @ah.RequestMethod::Post
-    @chttp.Put => @ah.RequestMethod::Put
-    @chttp.Delete => @ah.RequestMethod::Delete
-    @chttp.Patch => @ah.RequestMethod::Patch
+    @chroma.Get => @ah.RequestMethod::Get
+    @chroma.Post => @ah.RequestMethod::Post
+    @chroma.Put => @ah.RequestMethod::Put
+    @chroma.Delete => @ah.RequestMethod::Delete
+    @chroma.Patch => @ah.RequestMethod::Patch
   }
 }
 
 ///|
-impl @chttp.AsyncTransport for AsyncHttpTransport with fn send_async(
+impl @chroma.AsyncTransport for AsyncHttpTransport with fn send_async(
   self,
   request,
 ) {
@@ -73,4 +73,4 @@ impl @chttp.AsyncTransport for AsyncHttpTransport with fn send_async(
 }
 
 ///|
-pub extend AsyncHttpTransport with @chttp.AsyncTransport::{send_async}
+pub extend AsyncHttpTransport with @chroma.AsyncTransport::{send_async}
