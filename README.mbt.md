@@ -237,9 +237,22 @@ prints the exact requests the client would send.
 
 ## Testing
 
+The same script runs locally, on GitHub Actions and on CNB:
+
 ```bash
-moon check --target all
-moon test
+sh scripts/ci.sh
+```
+
+It expects `moon` on `PATH` (GitHub installs it in the workflow, CNB ships it
+in `.cnb/Dockerfile`) and then runs, in order: formatting, `moon check`,
+generated-interface freshness, tests with coverage, coverage reports, and
+debug + release builds.
+
+A single step can be run on its own, which is handy while developing:
+
+```bash
+sh scripts/ci.sh fmt check     # just formatting and type-checking
+sh scripts/ci.sh test coverage # just tests and coverage
 ```
 
 ## Status

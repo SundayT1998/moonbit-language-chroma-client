@@ -1,0 +1,32 @@
+# CNB pipelines: cloud-native development and CI share one image
+# (.cnb/Dockerfile) and one set of checks (scripts/ci.sh), so both platforms
+# run the same definition as GitHub Actions.
+.pipeline: &pipeline
+  docker:
+    build: .cnb/Dockerfile
+  runner:
+    tags: cnb:arch:amd64
+  stages:
+    - name: ci
+      script: sh scripts/ci.sh
+
+main:
+  push:
+    - <<: *pipeline
+      name: push
+  pull_request:
+    - <<: *pipeline
+      name: pull-request
+
+"**":
+  push:
+    - <<: *pipeline
+      name: push-branch
+
+$:
+  vscode:
+    - docker:
+        build: .cnb/Dockerfile
+      services:
+        - vscode
+        - docker
