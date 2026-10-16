@@ -3,7 +3,7 @@
 ///
 /// The integration tests talk to a real Chroma server, so they need a real
 /// transport rather than `MemoryTransport`'s scripted replies. It is the same
-/// shape as the one in `examples/native`, kept local so the test suite does
+/// shape as the one in `cmd/live`, kept local so the test suite does
 /// not depend on an example package.
 struct LiveTransport {}
 

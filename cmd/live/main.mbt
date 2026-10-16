@@ -4,7 +4,7 @@
 /// Usage:
 ///
 /// ```bash
-/// moon run examples/native --target native -- http://localhost:8000 my-collection
+/// moon run cmd/live --target native -- http://localhost:8000 my-collection
 /// ```
 ///
 /// The first argument is the server endpoint (default `http://localhost:8000`),

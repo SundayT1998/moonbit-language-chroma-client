@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "SundayT1998/chroma-client/examples/native"
+package "SundayT1998/chroma-client/cmd/live"
 
 import {
   "SundayT1998/chroma-client/http",
