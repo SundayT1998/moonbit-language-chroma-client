@@ -69,7 +69,7 @@ async fn example(transport : MyTransport) -> Unit raise @chroma.ChromaError {
 ```
 
 `MyTransport` is any type that implements `@chroma.AsyncTransport` — see
-[Adding a real transport](#adding-a-real-transport) and `examples/native/`.
+[Adding a real transport](#adding-a-real-transport) and `cmd/main/`.
 
 > **Chroma 1.x has no server-side embedding.** An `add` whose records carry
 > documents but no vectors is rejected by the server, so the client refuses it
@@ -153,7 +153,7 @@ impl @chroma.AsyncTransport for MyTransport with fn send_async(self, request) {
 `Request` carries the verb, URL, headers and optional JSON body; the transport
 only has to return a `Response`.
 
-A complete, runnable version lives in `examples/native/`. With
+A complete, runnable version lives in `cmd/main/`. With
 `moonbitlang/async/http` the `impl` alone is not enough: MoonBit also needs an
 `extend` declaration to make the method callable:
 
@@ -164,11 +164,11 @@ pub extend MyTransport with @chroma.AsyncTransport::{send_async}
 
 ## Native transport
 
-`examples/native/` holds a transport wired to `moonbitlang/async/http`, which
+`cmd/main/` holds a transport wired to `moonbitlang/async/http`, which
 is the only HTTP client in the ecosystem that runs on `native`:
 
 ```bash
-moon run examples/native --target native -- http://localhost:8000 my-collection
+moon run cmd/main --target native -- http://localhost:8000 my-collection
 ```
 
 It creates a collection, adds vectors, counts, queries with distances, applies
@@ -392,15 +392,12 @@ on the request:
 
 ## Examples
 
-`cmd/main` needs no server: it uses a logging transport and prints the exact
-requests the client would send.
+`cmd/main` is a single runnable example: it talks to a real Chroma server over
+`moonbitlang/async/http` — see [Native transport](#native-transport) above.
 
 ```bash
-moon run cmd/main -- my-collection
+moon run cmd/main --target native -- http://localhost:8000 my-collection
 ```
-
-`examples/native` talks to a real Chroma server over
-`moonbitlang/async/http` — see [Native transport](#native-transport) above.
 
 ## Testing
 

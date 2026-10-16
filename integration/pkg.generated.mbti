@@ -3,7 +3,6 @@ package "SundayT1998/chroma-client/integration"
 
 import {
   "SundayT1998/chroma-client",
-  "SundayT1998/chroma-client/http",
 }
 
 // Values
@@ -19,7 +18,7 @@ pub async fn with_collection(String, async (@chroma-client.ChromaClient[LiveTran
 
 // Types and methods
 type LiveTransport
-pub async fn LiveTransport::send_async(Self, @http.Request) -> @http.Response
+pub async fn LiveTransport::send_async(Self, @chroma-client.Request) -> @chroma-client.Response
 
 // Type aliases
 

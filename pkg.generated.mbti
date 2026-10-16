@@ -2,8 +2,8 @@
 package "SundayT1998/chroma-client"
 
 import {
-  "SundayT1998/chroma-client/http",
   "moonbitlang/core/debug",
+  "moonbitlang/core/ref",
 }
 
 // Values
@@ -17,15 +17,19 @@ pub const TIMEOUT_HEADER : String = "x-chroma-timeout-ms"
 
 pub fn api_error(Int, String) -> ChromaError
 
+pub fn append_query(String, Array[(String, String)]) -> String
+
 pub fn debug_collection_config(CollectionConfig) -> Json
 
 pub fn embedding_from_json(Json) -> Array[Double] raise ChromaError
 
 pub fn embedding_to_json(Array[Double]) -> Json
 
-pub fn json_response(Int, String, headers? : Map[String, String]) -> @http.Response
+pub fn encode_path_segment(String) -> String
 
-pub fn memory_transport(responses? : Array[@http.Response]) -> @http.MemoryTransport
+pub fn encode_query_component(String) -> String
+
+pub fn join_url(String, String) -> String
 
 pub fn metadata_from_json(Json) -> Array[(String, MetadataValue)]
 
@@ -76,42 +80,42 @@ pub(all) struct ChromaClient[T] {
   transport : T
   config : Config
 }
-pub fn[T : @http.Transport] ChromaClient::add(Self[T], String, Array[Record]) -> Unit raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::add_async(Self[T], String, Array[Record]) -> Unit raise ChromaError
+pub fn[T : Transport] ChromaClient::add(Self[T], String, Array[Record]) -> Unit raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::add_async(Self[T], String, Array[Record]) -> Unit raise ChromaError
 pub fn[T] ChromaClient::config(Self[T]) -> Config
-pub fn[T : @http.Transport] ChromaClient::count(Self[T], String) -> Int raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::count_async(Self[T], String) -> Int raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::count_collections(Self[T]) -> Int raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::count_collections_async(Self[T]) -> Int raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::create_collection(Self[T], String, config? : CollectionConfig) -> Collection raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::create_collection_async(Self[T], String, config? : CollectionConfig) -> Collection raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::delete(Self[T], String, filter? : Filter) -> Unit raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::delete_async(Self[T], String, filter? : Filter) -> Unit raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::delete_collection(Self[T], String) -> Unit raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::delete_collection_async(Self[T], String) -> Unit raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::get(Self[T], String, filter? : Filter) -> QueryResult raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::get_async(Self[T], String, filter? : Filter) -> QueryResult raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::get_collection(Self[T], String) -> Collection? raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::get_collection_async(Self[T], String) -> Collection? raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::get_or_create_collection(Self[T], String, config? : CollectionConfig) -> Collection raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::get_or_create_collection_async(Self[T], String, config? : CollectionConfig) -> Collection raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::heartbeat(Self[T]) -> Int64 raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::heartbeat_async(Self[T]) -> Int64 raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::list_collections(Self[T]) -> Array[Collection] raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::list_collections_async(Self[T]) -> Array[Collection] raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::modify_collection(Self[T], String, new_name? : String?, metadata? : Array[(String, MetadataValue)]?) -> Unit raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::modify_collection_async(Self[T], String, new_name? : String?, metadata? : Array[(String, MetadataValue)]?) -> Unit raise ChromaError
+pub fn[T : Transport] ChromaClient::count(Self[T], String) -> Int raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::count_async(Self[T], String) -> Int raise ChromaError
+pub fn[T : Transport] ChromaClient::count_collections(Self[T]) -> Int raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::count_collections_async(Self[T]) -> Int raise ChromaError
+pub fn[T : Transport] ChromaClient::create_collection(Self[T], String, config? : CollectionConfig) -> Collection raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::create_collection_async(Self[T], String, config? : CollectionConfig) -> Collection raise ChromaError
+pub fn[T : Transport] ChromaClient::delete(Self[T], String, filter? : Filter) -> Unit raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::delete_async(Self[T], String, filter? : Filter) -> Unit raise ChromaError
+pub fn[T : Transport] ChromaClient::delete_collection(Self[T], String) -> Unit raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::delete_collection_async(Self[T], String) -> Unit raise ChromaError
+pub fn[T : Transport] ChromaClient::get(Self[T], String, filter? : Filter) -> QueryResult raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::get_async(Self[T], String, filter? : Filter) -> QueryResult raise ChromaError
+pub fn[T : Transport] ChromaClient::get_collection(Self[T], String) -> Collection? raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::get_collection_async(Self[T], String) -> Collection? raise ChromaError
+pub fn[T : Transport] ChromaClient::get_or_create_collection(Self[T], String, config? : CollectionConfig) -> Collection raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::get_or_create_collection_async(Self[T], String, config? : CollectionConfig) -> Collection raise ChromaError
+pub fn[T : Transport] ChromaClient::heartbeat(Self[T]) -> Int64 raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::heartbeat_async(Self[T]) -> Int64 raise ChromaError
+pub fn[T : Transport] ChromaClient::list_collections(Self[T]) -> Array[Collection] raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::list_collections_async(Self[T]) -> Array[Collection] raise ChromaError
+pub fn[T : Transport] ChromaClient::modify_collection(Self[T], String, new_name? : String?, metadata? : Array[(String, MetadataValue)]?) -> Unit raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::modify_collection_async(Self[T], String, new_name? : String?, metadata? : Array[(String, MetadataValue)]?) -> Unit raise ChromaError
 pub fn[T] ChromaClient::new(T, config? : Config) -> Self[T]
-pub fn[T : @http.Transport] ChromaClient::peek(Self[T], String, limit? : Int, include_fields? : Include) -> QueryResult raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::peek_async(Self[T], String, limit? : Int, include_fields? : Include) -> QueryResult raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::query_embeddings(Self[T], String, Array[Array[Double]], n_results? : Int, include_fields? : Include, filter? : Filter) -> QueryResult raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::query_embeddings_async(Self[T], String, Array[Array[Double]], n_results? : Int, include_fields? : Include, filter? : Filter) -> QueryResult raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::update(Self[T], String, Array[Record], filter? : Filter) -> Unit raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::update_async(Self[T], String, Array[Record], filter? : Filter) -> Unit raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::upsert(Self[T], String, Array[Record]) -> Unit raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::upsert_async(Self[T], String, Array[Record]) -> Unit raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::version(Self[T]) -> String raise ChromaError
-pub async fn[T : @http.AsyncTransport] ChromaClient::version_async(Self[T]) -> String raise ChromaError
+pub fn[T : Transport] ChromaClient::peek(Self[T], String, limit? : Int, include_fields? : Include) -> QueryResult raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::peek_async(Self[T], String, limit? : Int, include_fields? : Include) -> QueryResult raise ChromaError
+pub fn[T : Transport] ChromaClient::query_embeddings(Self[T], String, Array[Array[Double]], n_results? : Int, include_fields? : Include, filter? : Filter) -> QueryResult raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::query_embeddings_async(Self[T], String, Array[Array[Double]], n_results? : Int, include_fields? : Include, filter? : Filter) -> QueryResult raise ChromaError
+pub fn[T : Transport] ChromaClient::update(Self[T], String, Array[Record], filter? : Filter) -> Unit raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::update_async(Self[T], String, Array[Record], filter? : Filter) -> Unit raise ChromaError
+pub fn[T : Transport] ChromaClient::upsert(Self[T], String, Array[Record]) -> Unit raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::upsert_async(Self[T], String, Array[Record]) -> Unit raise ChromaError
+pub fn[T : Transport] ChromaClient::version(Self[T]) -> String raise ChromaError
+pub async fn[T : AsyncTransport] ChromaClient::version_async(Self[T]) -> String raise ChromaError
 
 pub(all) struct Collection {
   id : String
@@ -179,6 +183,18 @@ pub fn Include::ids_only() -> Self
 pub fn Include::not_equal(Self, Self) -> Bool
 pub fn Include::to_repr(Self) -> @debug.Repr
 
+pub(all) struct MemoryTransport {
+  responses : Array[Response]
+  observed : Array[Request]
+  cursor : @ref.Ref[Int]
+} derive(@debug.Debug)
+pub fn MemoryTransport::last_request(Self) -> Request?
+pub fn MemoryTransport::new(responses? : Array[Response]) -> Self
+pub fn MemoryTransport::observed(Self) -> Array[Request]
+pub fn MemoryTransport::send(Self, Request) -> Response raise
+pub fn MemoryTransport::to_repr(Self) -> @debug.Repr
+pub impl Transport for MemoryTransport
+
 pub(all) enum MetadataValue {
   MString(String)
   MInt(Int)
@@ -191,6 +207,19 @@ pub fn MetadataValue::from_json(Json) -> Self?
 pub fn MetadataValue::not_equal(Self, Self) -> Bool
 pub fn MetadataValue::to_json(Self) -> Json
 pub fn MetadataValue::to_repr(Self) -> @debug.Repr
+
+pub(all) enum Method {
+  Get
+  Post
+  Put
+  Delete
+  Patch
+} derive(Eq, @debug.Debug)
+pub fn Method::equal(Self, Self) -> Bool
+pub fn Method::not_equal(Self, Self) -> Bool
+pub fn Method::output(Self, &Logger) -> Unit
+pub fn Method::to_repr(Self) -> @debug.Repr
+pub fn Method::to_string(Self) -> String
 
 pub(all) struct QueryResult {
   ids : Array[String]
@@ -220,6 +249,26 @@ pub fn Record::with_document(Self, String) -> Self
 pub fn Record::with_embedding(Self, Array[Double]) -> Self
 pub fn Record::with_metadata(Self, Array[(String, MetadataValue)]) -> Self
 
+pub(all) struct Request {
+  verb : Method
+  url : String
+  headers : Map[String, String]
+  body : String?
+} derive(Eq, @debug.Debug)
+pub fn Request::equal(Self, Self) -> Bool
+pub fn Request::not_equal(Self, Self) -> Bool
+pub fn Request::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Response {
+  status : Int
+  headers : Map[String, String]
+  body : String
+} derive(Eq, @debug.Debug)
+pub fn Response::equal(Self, Self) -> Bool
+pub fn Response::json(Int, String, headers? : Map[String, String]) -> Self
+pub fn Response::not_equal(Self, Self) -> Bool
+pub fn Response::to_repr(Self) -> @debug.Repr
+
 pub(all) struct RetryPolicy {
   enabled : Bool
   max_attempts : Int
@@ -241,9 +290,9 @@ pub(all) struct RetryTransport[T] {
 pub fn[T] RetryTransport::new(T, policy? : RetryPolicy) -> Self[T]
 pub fn[T] RetryTransport::on_retry(Self[T], (Int, Int, ChromaError) -> Unit) -> Self[T]
 pub fn[T] RetryTransport::policy(Self[T]) -> RetryPolicy
-pub fn[T : @http.Transport] RetryTransport::send(Self[T], @http.Request) -> @http.Response raise
+pub fn[T : Transport] RetryTransport::send(Self[T], Request) -> Response raise
 pub fn[T] RetryTransport::with_policy(Self[T], RetryPolicy) -> Self[T]
-pub impl[T : @http.Transport] @http.Transport for RetryTransport[T]
+pub impl[T : Transport] Transport for RetryTransport[T]
 
 pub(all) struct TimeoutTransport[T] {
   inner : T
@@ -251,24 +300,19 @@ pub(all) struct TimeoutTransport[T] {
 }
 pub fn[T] TimeoutTransport::from_config(T, Config) -> Self[T]
 pub fn[T] TimeoutTransport::new(T, Int) -> Self[T]
-pub fn[T : @http.Transport] TimeoutTransport::send(Self[T], @http.Request) -> @http.Response raise
-pub impl[T : @http.Transport] @http.Transport for TimeoutTransport[T]
+pub fn[T : Transport] TimeoutTransport::send(Self[T], Request) -> Response raise
+pub impl[T : Transport] Transport for TimeoutTransport[T]
 
 // Type aliases
 pub type Embedding = Array[Double]
 
-pub using @http {type MemoryTransport}
-
 pub type Metadata = Array[(String, MetadataValue)]
 
-pub using @http {type Method}
-
-pub using @http {type Request}
-
-pub using @http {type Response}
-
-pub using @http {trait AsyncTransport}
-
-pub using @http {trait Transport}
-
 // Traits
+pub(open) trait AsyncTransport {
+  async fn send_async(Self, Request) -> Response
+}
+
+pub(open) trait Transport {
+  fn send(Self, Request) -> Response raise
+}

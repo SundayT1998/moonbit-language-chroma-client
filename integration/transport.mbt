@@ -3,7 +3,7 @@
 ///
 /// The integration tests talk to a real Chroma server, so they need a real
 /// transport rather than `MemoryTransport`'s scripted replies. It is the same
-/// shape as the one in `examples/native`, kept local so the test suite does
+/// shape as the one in `cmd/main`, kept local so the test suite does
 /// not depend on an example package.
 struct LiveTransport {}
 
@@ -13,18 +13,18 @@ fn LiveTransport::new() -> LiveTransport {
 }
 
 ///|
-fn to_ah_method(verb : @chttp.Method) -> @ah.RequestMethod {
+fn to_ah_method(verb : @chroma.Method) -> @ah.RequestMethod {
   match verb {
-    @chttp.Get => @ah.RequestMethod::Get
-    @chttp.Post => @ah.RequestMethod::Post
-    @chttp.Put => @ah.RequestMethod::Put
-    @chttp.Delete => @ah.RequestMethod::Delete
-    @chttp.Patch => @ah.RequestMethod::Patch
+    @chroma.Get => @ah.RequestMethod::Get
+    @chroma.Post => @ah.RequestMethod::Post
+    @chroma.Put => @ah.RequestMethod::Put
+    @chroma.Delete => @ah.RequestMethod::Delete
+    @chroma.Patch => @ah.RequestMethod::Patch
   }
 }
 
 ///|
-impl @chttp.AsyncTransport for LiveTransport with fn send_async(self, request) {
+impl @chroma.AsyncTransport for LiveTransport with fn send_async(self, request) {
   ignore(self)
   let headers : @ah.Headers = Map([])
   for entry in request.headers {
@@ -50,4 +50,4 @@ impl @chttp.AsyncTransport for LiveTransport with fn send_async(self, request) {
 }
 
 ///|
-pub extend LiveTransport with @chttp.AsyncTransport::{send_async}
+pub extend LiveTransport with @chroma.AsyncTransport::{send_async}

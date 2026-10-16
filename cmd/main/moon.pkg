@@ -1,4 +1,7 @@
 import {
+  "moonbitlang/async",
+  "moonbitlang/async/http" @ah,
+  "moonbitlang/async/io" @aio,
   "moonbitlang/core/env",
   "SundayT1998/chroma-client" @chroma,
 }

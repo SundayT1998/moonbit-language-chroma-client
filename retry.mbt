@@ -133,7 +133,7 @@ pub impl[T : Transport] Transport for RetryTransport[T] with fn send(
     return self.inner.send(request)
   }
   let mut attempt = 0
-  let mut last : @http.Response? = None
+  let mut last : Response? = None
   while attempt < self.policy.max_attempts {
     let response = self.inner.send(request)
     // `last` keeps the final response so the loop can report it on the
@@ -166,7 +166,7 @@ pub impl[T : Transport] Transport for RetryTransport[T] with fn send(
 ///|
 /// Whether a response is worth re-sending: the server was reachable but
 /// asked the client to come back (429), or failed on its side (5xx).
-fn is_transient(response : @http.Response) -> Bool {
+fn is_transient(response : Response) -> Bool {
   response.status == 429 || (response.status >= 500 && response.status < 600)
 }
 
@@ -186,4 +186,4 @@ pub extend RetryPolicy with Eq::{not_equal, equal}
 pub extend RetryPolicy with @debug.Debug::{to_repr}
 
 ///|
-pub extend RetryTransport with @http.Transport::{send}
+pub extend RetryTransport with Transport::{send}

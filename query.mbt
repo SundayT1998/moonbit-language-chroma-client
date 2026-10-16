@@ -166,7 +166,7 @@ fn embedding_array(values : Array[Json]) -> Array[Embedding?] {
 
 ///|
 /// Searches a collection with caller-supplied query vectors.
-pub fn[T : @http.Transport] ChromaClient::query_embeddings(
+pub fn[T : Transport] ChromaClient::query_embeddings(
   self : ChromaClient[T],
   collection_id : String,
   embeddings : Array[Embedding],
@@ -191,13 +191,13 @@ pub fn[T : @http.Transport] ChromaClient::query_embeddings(
 
 ///|
 /// Posts a query body and decodes the nested query response.
-fn[T : @http.Transport] ChromaClient::run_query(
+fn[T : Transport] ChromaClient::run_query(
   self : ChromaClient[T],
   collection_id : String,
   body : Json,
 ) -> QueryResult raise ChromaError {
   let path = self.collection_path(collection_id) + "/query"
-  let response = self.send(@http.Post, path, body~)
+  let response = self.send(Post, path, body~)
   // `send` only guards the status line; the guard on the body has to happen
   // here too, otherwise `from_query_json` would walk a huge payload.
   QueryResult::from_query_json(self.response_json_or_null(response))

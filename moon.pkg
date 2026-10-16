@@ -1,15 +1,13 @@
 import {
+  "moonbitlang/core/debug",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/core/encoding/utf8",
-  "moonbitlang/core/debug",
   "moonbitlang/core/json",
   "moonbitlang/core/string",
-  "SundayT1998/chroma-client/http",
 }
 
 pkgtype(kind: "library")
 
 import {
   "moonbitlang/core/json",
-  "SundayT1998/chroma-client/http",
 } for "test"
