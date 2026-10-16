@@ -15,6 +15,8 @@ The README is the entry point; everything longer lives in [`docs/`](docs/):
   has to pass, the two test layers, code style, commit and PR conventions.
 - [`docs/chroma-api-coverage.md`](docs/chroma-api-coverage.md) — which Chroma
   v2 endpoints the client covers, which it deliberately does not, and why.
+- [`docs/serialization-perf.md`](docs/serialization-perf.md) — what a large
+  record batch costs to serialize, and why the write path is not streamed.
 
 ## Design
 
@@ -430,17 +432,22 @@ moon run cmd/main --target native -- http://localhost:8000 my-collection
 ## Testing
 
 Two layers, both run by CI. [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md)
-has the full version, including when a change needs a live test.
+has the full version, including when a change needs a live test. The gates a
+change has to clear are listed there too — in short, everything green via
+`sh scripts/ci.sh`, including a core-path coverage floor of 80%.
 
-The unit suite uses `MemoryTransport` and needs nothing but `moon`:
+The unit suites need nothing but `moon`: the synchronous half is driven through
+`MemoryTransport`, and the `_async` half through the package-private
+`ScriptedAsyncTransport` (see `scripted_transport_wbtest.mbt`), because an
+`async` method cannot be driven from the synchronous double.
 
 ```bash
 sh scripts/ci.sh
 ```
 
 It runs, in order: formatting, `moon check`, generated-interface freshness,
-tests with coverage, coverage reports, and debug + release builds. A single
-step can be run on its own:
+tests with coverage, coverage reports, a core-path coverage gate (>= 80%), and
+debug + release builds. A single step can be run on its own:
 
 ```bash
 sh scripts/ci.sh fmt check     # just formatting and type-checking

@@ -627,3 +627,33 @@ test "errors compare across every variant" {
   let status = @chroma-client.ChromaError::Status(502, "bad gateway")
   assert_eq(status.message(), "bad gateway")
 }
+
+///|
+test "null metadata survives a round trip" {
+  // `MNull` is how Chroma represents an explicit null in metadata; dropping
+  // it on decode would silently change a record's fields.
+  let metadata = @chroma-client.metadata_from_json(
+    @json.parse("{\"gone\": null}"),
+  )
+  assert_eq(metadata, [("gone", @chroma-client.MNull)])
+  assert_eq(
+    @chroma-client.metadata_to_json(metadata),
+    @json.parse("{\"gone\":null}"),
+  )
+}
+
+///|
+test "a scalar response decodes as empty optional fields" {
+  // `optional_array` / `optional_object` receive a non-object when a server
+  // answers a result-set request with something else. They default rather
+  // than raise, so a caller still sees the ids it asked for.
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{\"ids\":[\"a\"]}"),
+    @chroma-client.Response::json(200, "{\"ids\":\"a\"}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  assert_eq(client.get("c1").embeddings, [])
+  // A non-array `ids` is still a decode error, so the empty defaults above
+  // are not hiding a malformed result entirely.
+  assert_true(try_catch(() => ignore(client.get("c1"))) is Err(Decode(_)))
+}
