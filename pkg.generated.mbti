@@ -7,9 +7,15 @@ import {
 }
 
 // Values
+pub const MAX_RESPONSE_BYTES : Int = 33554432
+
 pub const PEEK_LIMIT : Int = 100
 
+pub const RETRY_DELAY_HEADER : String = "x-chroma-retry-delay-ms"
+
 pub const TIMEOUT_HEADER : String = "x-chroma-timeout-ms"
+
+pub fn api_error(Int, String) -> ChromaError
 
 pub fn debug_collection_config(CollectionConfig) -> Json
 
@@ -29,19 +35,41 @@ pub fn validate_limit_offset(Int?, Int?) -> Unit raise ChromaError
 
 pub fn validate_n_results(Int) -> Unit raise ChromaError
 
+pub fn validate_query_inputs(String, Array[Json]) -> Unit raise ChromaError
+
+pub fn validate_records(Array[Record]) -> Unit raise ChromaError
+
 // Errors
 pub(all) suberror ChromaError {
   Transport(String)
   Status(Int, String)
+  Api(ApiError)
   Decode(String)
   InvalidArgument(String)
 }
 pub fn ChromaError::equal(Self, Self) -> Bool
+pub fn ChromaError::is_retryable(Self) -> Bool
+pub fn ChromaError::message(Self) -> String
 pub fn ChromaError::not_equal(Self, Self) -> Bool
 pub fn ChromaError::output(Self, &Logger) -> Unit
+pub fn ChromaError::status_code(Self) -> Int?
 pub fn ChromaError::to_string(Self) -> String
 
 // Types and methods
+pub(all) struct ApiError {
+  status : Int
+  error_code : String
+  message : String
+  body : String
+  details : Json
+} derive(Eq, @debug.Debug)
+pub fn ApiError::equal(Self, Self) -> Bool
+pub fn ApiError::from_json(Int, String) -> Self
+pub fn ApiError::not_equal(Self, Self) -> Bool
+pub fn ApiError::output(Self, &Logger) -> Unit
+pub fn ApiError::to_repr(Self) -> @debug.Repr
+pub fn ApiError::to_string(Self) -> String
+
 pub(all) struct ChromaClient[T] {
   transport : T
   config : Config
@@ -174,6 +202,31 @@ pub fn Record::of_embedding(String, Array[Double], metadata? : Array[(String, Me
 pub fn Record::to_json(Self) -> Json
 pub fn Record::to_repr(Self) -> @debug.Repr
 pub fn Record::with_embedding_function(Self, Json) -> Self raise ChromaError
+
+pub(all) struct RetryPolicy {
+  enabled : Bool
+  max_attempts : Int
+  initial_delay_ms : Int
+  max_delay_ms : Int
+  backoff_factor : Double
+} derive(Eq, @debug.Debug)
+pub fn RetryPolicy::delay_ms(Self, Int) -> Int
+pub fn RetryPolicy::equal(Self, Self) -> Bool
+pub fn RetryPolicy::new(enabled? : Bool, max_attempts? : Int, initial_delay_ms? : Int, max_delay_ms? : Int, backoff_factor? : Double) -> Self
+pub fn RetryPolicy::not_equal(Self, Self) -> Bool
+pub fn RetryPolicy::to_repr(Self) -> @debug.Repr
+
+pub(all) struct RetryTransport[T] {
+  inner : T
+  policy : RetryPolicy
+  on_retry : ((Int, Int, ChromaError) -> Unit)?
+}
+pub fn[T] RetryTransport::new(T, policy? : RetryPolicy) -> Self[T]
+pub fn[T] RetryTransport::on_retry(Self[T], (Int, Int, ChromaError) -> Unit) -> Self[T]
+pub fn[T] RetryTransport::policy(Self[T]) -> RetryPolicy
+pub fn[T : @http.Transport] RetryTransport::send(Self[T], @http.Request) -> @http.Response raise
+pub fn[T] RetryTransport::with_policy(Self[T], RetryPolicy) -> Self[T]
+pub impl[T : @http.Transport] @http.Transport for RetryTransport[T]
 
 pub(all) struct TimeoutTransport[T] {
   inner : T

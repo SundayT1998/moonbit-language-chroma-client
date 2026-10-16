@@ -209,10 +209,105 @@ an `embedding` has nothing left to embed, so `with_embedding_function` raises
 Every fallible call raises `ChromaError`:
 
 - `Transport(String)` — the request could not be sent;
-- `Status(Int, String)` — the server answered non-2xx;
+- `Api(ApiError)` — the server answered non-2xx with Chroma's error body;
+- `Status(Int, String)` — the server answered non-2xx with a body that is not
+  a Chroma error envelope (a proxy page, say);
 - `Decode(String)` — the response body was not the expected JSON;
 - `InvalidArgument(String)` — the arguments would be rejected by Chroma, so
   nothing was sent.
+
+`ApiError` splits the response so no caller has to parse it again: `status`,
+`error_code` (Chroma's short label), `message` (the sentence), `details` (any
+extra structure) and the raw `body`. A couple of helpers cover the usual
+branches:
+
+```moonbit nocheck
+///|
+match result {
+  Err(error) =>
+    if error.status_code() == Some(404) {
+      // nothing there
+    } else if error.is_retryable() {
+      // 429 or 5xx, worth trying again
+    } else {
+      println(error.message())
+    }
+  Ok(value) => ignore(value)
+}
+```
+
+## Retrying
+
+Retrying is opt-in: a plain client sends one request and reports what came
+back. Wrapping the transport with a `RetryPolicy` turns on retries for 429 and
+5xx only — a 4xx is a deterministic answer, so repeating it just burns a
+round-trip.
+
+```moonbit nocheck
+///|
+let client = @chroma.ChromaClient::new(
+  @chroma.RetryTransport::new(
+    http_stack,
+    policy=@chroma.RetryPolicy::new(
+      enabled=true,
+      max_attempts=3,
+      initial_delay_ms=200,
+      max_delay_ms=5000,
+      backoff_factor=2.0,
+    ),
+  ),
+)
+```
+
+The library still performs no I/O, so it never sleeps. Each retry is announced
+through `on_retry(attempt, delay_ms, error)`, and the delay is stamped on the
+request as `x-chroma-retry-delay-ms` for a transport that can wait:
+
+```moonbit nocheck
+///|
+let transport = @chroma.RetryTransport::new(http_stack).on_retry((
+  attempt,
+  delay_ms,
+  error,
+) => {
+  println(
+    "retry " +
+    attempt.to_string() +
+    " in " +
+    delay_ms.to_string() +
+    "ms: " +
+    error.to_string(),
+  )
+})
+```
+
+For example, in a `js` transport the callback is where `setTimeout` belongs.
+
+## Response size
+
+A response body is read into one `String`, so the client caps it at
+`MAX_RESPONSE_BYTES` (32 MiB) and raises `Decode` past it. Truncating would
+turn a memory problem into silent data loss, so the client fails loudly
+instead; the fix on the caller's side is to narrow `include`, lower
+`n_results`, or page with `limit`. Error bodies are read before the cap is
+applied, so a long error message still reaches the caller.
+
+## Local validation
+
+Arguments Chroma would reject outright are caught before a request is built,
+so a bug in your code surfaces as a `InvalidArgument` with a sentence rather
+than a 400 and a round-trip:
+
+- an empty `records` batch on `add` / `upsert` / `update`;
+- a record with an empty `id`, or with neither a `document` nor an
+  `embedding`;
+- an empty `texts` list on `query_text`, or an empty `embeddings` list on
+  `query_embeddings`;
+- `n_results <= 0`, and an `offset` that is not smaller than `limit`.
+
+The checks are exposed as `validate_records`, `validate_query_inputs`,
+`validate_n_results` and `validate_limit_offset` if you build requests
+yourself.
 
 ## Decoding rules
 
@@ -260,6 +355,8 @@ sh scripts/ci.sh test coverage # just tests and coverage
 Early but functional. The v2 collection, record and query endpoints are
 implemented, including `count` and `peek`; token and basic authentication have
 shorthands on `Config`, and tenant/database selection is part of the config.
+Server errors are parsed into `ApiError`, transient failures can be retried
+explicitly, and request arguments are validated locally before they are sent.
 
 ## License
 

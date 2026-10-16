@@ -180,6 +180,7 @@ pub fn[T : @http.Transport] ChromaClient::query_text(
   for text in texts {
     items.push(Json::string(text))
   }
+  validate_query_inputs("query_texts", items)
   let body : Map[String, Json] = Map([])
   body["query_texts"] = Json::array(items)
   body["n_results"] = Json::number(n_results.to_double())
@@ -204,6 +205,7 @@ pub fn[T : @http.Transport] ChromaClient::query_embeddings(
   for embedding in embeddings {
     items.push(embedding_to_json(embedding))
   }
+  validate_query_inputs("query_embeddings", items)
   let body : Map[String, Json] = Map([])
   body["query_embeddings"] = Json::array(items)
   body["n_results"] = Json::number(n_results.to_double())
@@ -220,7 +222,10 @@ fn[T : @http.Transport] ChromaClient::run_query(
   body : Json,
 ) -> QueryResult raise ChromaError {
   let path = self.collection_path(collection_id) + "/query"
-  QueryResult::from_query_json(self.send_json(@http.Post, path, body~))
+  let response = self.send(@http.Post, path, body~)
+  // `send` only guards the status line; the guard on the body has to happen
+  // here too, otherwise `from_query_json` would walk a huge payload.
+  QueryResult::from_query_json(self.response_json_or_null(response))
 }
 
 ///|
