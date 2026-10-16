@@ -93,10 +93,9 @@ log "moon test --target native (integration)"
 # A run id namespaces the collections each test creates, so two jobs sharing
 # one server cannot collide, and leftovers from a failed job stay
 # identifiable.
-export CHROMA_ENDPOINT="${ENDPOINT}"
 export CHROMA_TEST_RUN_ID="${CHROMA_TEST_RUN_ID:-${CNB_BUILD_ID:-$$}}"
 
-if ! moon test --target native --deny-warn -p SundayT1998/chroma-client/integration; then
+if ! CHROMA_ENDPOINT="${ENDPOINT}" moon test --target native --deny-warn -p SundayT1998/chroma-client; then
   echo "" >&2
   echo "integration tests failed." >&2
   echo "If the failure above is dependency resolution (not a test failure), the" >&2

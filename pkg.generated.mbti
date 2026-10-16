@@ -76,6 +76,12 @@ pub fn ApiError::output(Self, &Logger) -> Unit
 pub fn ApiError::to_repr(Self) -> @debug.Repr
 pub fn ApiError::to_string(Self) -> String
 
+pub struct AsyncHttpTransport {
+}
+pub fn AsyncHttpTransport::new() -> Self
+pub async fn AsyncHttpTransport::send_async(Self, Request) -> Response
+pub impl AsyncTransport for AsyncHttpTransport
+
 pub(all) struct ChromaClient[T] {
   transport : T
   config : Config

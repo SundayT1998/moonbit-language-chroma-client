@@ -23,7 +23,7 @@ async fn main {
   }
   let name = if args.length() > 2 { args[2] } else { "chroma-client-demo" }
   let client = @chroma.ChromaClient::new(
-    AsyncHttpTransport::new(),
+    @chroma.AsyncHttpTransport::new(),
     config=@chroma.Config::new(endpoint~),
   )
   println("endpoint: " + endpoint)

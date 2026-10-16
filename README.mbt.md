@@ -9,28 +9,39 @@ manage records without leaving the language.
 
 ## Design
 
-The library never performs socket I/O itself. Instead it builds requests and
-decodes responses, and delegates the actual transport to a trait you
-implement. There are two of them:
+The library builds requests and decodes responses, and delegates the actual
+sockets to a trait. It ships the transport real applications use —
+`AsyncHttpTransport`, backed by `moonbitlang/async/http` — and leaves the trait
+open so an application with its own HTTP stack can plug it in. There are two
+traits:
+
+- `AsyncTransport` — asynchronous, with `async fn send_async`. This is the one
+  the bundled `AsyncHttpTransport` implements, because
+  `moonbitlang/async/http` only offers `async` functions and an `async` call
+  cannot be made from a synchronous one.
 
 - `Transport` — synchronous. `MemoryTransport` implements it, so scripted
   responses cover the whole request/response cycle in ordinary `moon test`
   runs.
-- `AsyncTransport` — asynchronous, with `async fn send_async`. This is what a
-  real HTTP stack implements, because `moonbitlang/async/http` only offers
-  `async` functions and an `async` call cannot be made from a synchronous one.
 
 Every public method exists in both flavours: `client.add(...)` is synchronous,
 `client.add_async(...)` is asynchronous. Choosing between them is choosing
 which trait your transport implements and whether your call site is `async`.
 
-Keeping I/O out of the library means the client:
+The library ships its own transport, `AsyncHttpTransport`, backed by
+`moonbitlang/async/http`: a Chroma client that cannot reach a server is not
+useful, and native + wasm both run on the async stack the ecosystem already
+has. Callers get a working client out of the box, and the transport is:
 
-- **portable** — the same code runs on `wasm`, `wasm-gc`, `js` and `native`;
-- **testable** — `MemoryTransport` replays scripted responses, so the whole
-  request/response cycle is covered by ordinary `moon test` runs;
-- **embeddable** — you decide which HTTP stack, runtime and concurrency model
-  your application already uses.
+- **portable** — the same code runs on `native`, `wasm` and `js`. The
+  transport limits the library to the backends `moonbitlang/async` supports;
+  `wasm-gc` has no async runtime yet, so it is not a supported target;
+- **testable** — `MemoryTransport` implements the synchronous `Transport` and
+  replays scripted responses, so the whole request/response cycle is covered by
+  ordinary `moon test` runs without a server;
+- **replaceable** — `AsyncTransport` is a two-method-wide seam, so an
+  application that already owns an HTTP stack can plug it in instead of using
+  the bundled one.
 
 ## Install
 
@@ -42,8 +53,12 @@ moon add SundayT1998/chroma-client
 
 ```moonbit nocheck
 ///|
-async fn example(transport : MyTransport) -> Unit raise @chroma.ChromaError {
-  let client = @chroma.ChromaClient::new(transport)
+async fn example() -> Unit raise @chroma.ChromaError {
+  // `AsyncHttpTransport` is bundled; point the config at your Chroma server.
+  let client = @chroma.ChromaClient::new(
+    @chroma.AsyncHttpTransport::new(),
+    config=@chroma.Config::new(endpoint="http://localhost:8000"),
+  )
 
   let collection = client.get_or_create_collection_async("notes")
 
@@ -68,8 +83,10 @@ async fn example(transport : MyTransport) -> Unit raise @chroma.ChromaError {
 }
 ```
 
-`MyTransport` is any type that implements `@chroma.AsyncTransport` — see
-[Adding a real transport](#adding-a-real-transport) and `cmd/main/`.
+`AsyncHttpTransport` ships with the library (see [Native transport](#native-transport)),
+so most callers never write a transport. If your application already owns an
+HTTP stack, implement `@chroma.AsyncTransport` instead — see
+[Adding a real transport](#adding-a-real-transport).
 
 > **Chroma 1.x has no server-side embedding.** An `add` whose records carry
 > documents but no vectors is rejected by the server, so the client refuses it
@@ -153,9 +170,10 @@ impl @chroma.AsyncTransport for MyTransport with fn send_async(self, request) {
 `Request` carries the verb, URL, headers and optional JSON body; the transport
 only has to return a `Response`.
 
-A complete, runnable version lives in `cmd/main/`. With
-`moonbitlang/async/http` the `impl` alone is not enough: MoonBit also needs an
-`extend` declaration to make the method callable:
+That is exactly what the bundled `AsyncHttpTransport` does; its source is
+`async_http_transport.mbt`. With `moonbitlang/async/http` the `impl` alone is
+not enough: MoonBit also needs an `extend` declaration to make the method
+callable:
 
 ```moonbit night
 ///|
@@ -164,8 +182,8 @@ pub extend MyTransport with @chroma.AsyncTransport::{send_async}
 
 ## Native transport
 
-`cmd/main/` holds a transport wired to `moonbitlang/async/http`, which
-is the only HTTP client in the ecosystem that runs on `native`:
+`AsyncHttpTransport` (in the library) is wired to `moonbitlang/async/http`,
+which is the only HTTP client in the ecosystem that runs on `native`:
 
 ```bash
 moon run cmd/main --target native -- http://localhost:8000 my-collection
@@ -392,8 +410,9 @@ on the request:
 
 ## Examples
 
-`cmd/main` is a single runnable example: it talks to a real Chroma server over
-`moonbitlang/async/http` — see [Native transport](#native-transport) above.
+`cmd/main` is a single runnable example: it talks to a real Chroma server
+through the library's `AsyncHttpTransport` — see
+[Native transport](#native-transport) above.
 
 ```bash
 moon run cmd/main --target native -- http://localhost:8000 my-collection
@@ -418,11 +437,14 @@ sh scripts/ci.sh fmt check     # just formatting and type-checking
 sh scripts/ci.sh test coverage # just tests and coverage
 ```
 
-The integration suite in `integration/` runs against a real Chroma server and
-is what caught the protocol bugs the unit tests could not: scripted responses
-only prove the client agrees with itself. Those tests skip when
-`CHROMA_ENDPOINT` is unset, so `scripts/ci.sh` stays runnable without Docker.
-To run them, start a server and point the suite at it:
+The live suite (`chroma_wbtest.mbt`) runs against a real Chroma server and is
+what caught the protocol bugs the unit tests could not: scripted responses only
+prove the client agrees with itself. It shares the root package with the
+client, and the transport it drives
+(`AsyncHttpTransport`, backed by `moonbitlang/async/http`) is exported by the
+library, so the code under test is exactly what an application runs.
+Those tests skip when `CHROMA_ENDPOINT` is unset, so `scripts/ci.sh` stays
+runnable without Docker. To run them, start a server and point the suite at it:
 
 ```bash
 sh scripts/integration.sh      # starts chromadb/chroma, runs, tears down
@@ -432,7 +454,7 @@ or, against a server you already have:
 
 ```bash
 CHROMA_ENDPOINT=http://localhost:8000 \
-  moon test --target native -p SundayT1998/chroma-client/integration
+  moon test --target native -p SundayT1998/chroma-client
 ```
 
 Both CI platforms run them: CNB starts the container through the `docker`
