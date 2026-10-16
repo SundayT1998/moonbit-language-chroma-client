@@ -21,6 +21,12 @@ You can browse and install extra skills here:
   similar Go layouts; MoonBit has no `internal` visibility rule to motivate
   them.
 
+## Docs
+
+`README.mbt.md` is the only Markdown file at the top level: it is the entry
+point and the module's `readme`. Everything else written for humans goes in
+`docs/`, one topic per file, linked from the README's "Docs" section.
+
 ## Coding convention
 
 - MoonBit code is organized in block style, each block is separated by `///|`,

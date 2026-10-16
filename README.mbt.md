@@ -7,6 +7,15 @@ generation (RAG) pipelines. `chroma-client` speaks Chroma's **v2 HTTP API**
 so MoonBit programs can create collections, add and query documents, and
 manage records without leaving the language.
 
+## Docs
+
+The README is the entry point; everything longer lives in [`docs/`](docs/):
+
+- [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) — setup, the checks a change
+  has to pass, the two test layers, code style, commit and PR conventions.
+- [`docs/chroma-api-coverage.md`](docs/chroma-api-coverage.md) — which Chroma
+  v2 endpoints the client covers, which it deliberately does not, and why.
+
 ## Design
 
 The library builds requests and decodes responses, and delegates the actual
@@ -420,7 +429,8 @@ moon run cmd/main --target native -- http://localhost:8000 my-collection
 
 ## Testing
 
-Two layers, both run by CI.
+Two layers, both run by CI. [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md)
+has the full version, including when a change needs a live test.
 
 The unit suite uses `MemoryTransport` and needs nothing but `moon`:
 
