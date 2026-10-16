@@ -150,7 +150,7 @@ test "invalid json bodies surface as a decode error" {
 }
 
 ///|
-/// Test-local field readers, mirroring the internal helpers.
+/// Test-local field readers, mirroring the record helpers.
 fn required_object(json : Json, key : String) -> Json raise {
   match json {
     Json::Object(fields) =>

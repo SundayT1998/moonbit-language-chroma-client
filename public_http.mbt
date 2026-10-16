@@ -1,6 +1,6 @@
 ///|
 /// Re-exports the transport vocabulary so applications can implement
-/// `Transport` without reaching into the internal package.
+/// `Transport` without pulling in the `http` package directly.
 pub using @http {
   type Request,
   type Response,

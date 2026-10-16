@@ -2,7 +2,7 @@
 package "SundayT1998/chroma-client/cmd/main"
 
 import {
-  "SundayT1998/chroma-client/internal/http",
+  "SundayT1998/chroma-client/http",
 }
 
 // Values
