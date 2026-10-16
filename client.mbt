@@ -127,10 +127,14 @@ fn required_int(json : Json, key : String) -> Int32 raise ChromaError {
 }
 
 ///|
-/// Reads an optional string field, defaulting to `""`.
-
-///|
-/// Reads a required array field.
+/// Reads a required array field, reporting a decode error when it is
+/// missing or not an array.
+fn required_array(json : Json, key : String) -> Array[Json] raise ChromaError {
+  match required_object(json, key) {
+    Json::Array(items) => items
+    _ => raise ChromaError::Decode("field \"" + key + "\" is not an array")
+  }
+}
 
 ///|
 /// Reads an optional array field, defaulting to an empty array.

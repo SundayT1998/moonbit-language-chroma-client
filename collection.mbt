@@ -12,8 +12,10 @@ pub(all) struct Collection {
 ///|
 /// Decodes a collection from a server response object.
 ///
-/// Only `id` and `name` are required; the remaining fields default to empty
-/// so that responses from older servers still decode.
+/// `id` and `name` are required: a response without them is not a
+/// collection, and silently defaulting a name to `""` would only push the
+/// failure further down the line. The remaining fields are optional and
+/// default to empty so that responses from older servers still decode.
 pub fn Collection::from_json(json : Json) -> Collection raise ChromaError {
   let log_position = with_default(optional_int(json, "log_position"), 0)
   let version = with_default(optional_int(json, "version"), 0)
@@ -119,5 +121,11 @@ pub extend CollectionConfig with @debug.Debug::{to_repr}
 /// Serializes a collection configuration, useful for logging and for
 /// building custom requests.
 pub fn debug_collection_config(config : CollectionConfig) -> Json {
+  create_body("", config)
+}
+
+///|
+/// Serializes the collection configuration for a create/modify request.
+pub fn CollectionConfig::to_json(config : CollectionConfig) -> Json {
   create_body("", config)
 }

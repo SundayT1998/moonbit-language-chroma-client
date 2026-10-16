@@ -25,6 +25,53 @@ pub fn Config::new(
 }
 
 ///|
+/// Returns a copy of the configuration with a Bearer token in
+/// `Authorization`.
+pub fn Config::with_token(self : Config, token : String) -> Config {
+  self.with_header("authorization", "Bearer " + token)
+}
+
+///|
+/// Returns a copy of the configuration with HTTP Basic authentication.
+pub fn Config::with_basic_auth(
+  self : Config,
+  username : String,
+  password : String,
+) -> Config {
+  self.with_header(
+    "authorization",
+    "Basic " + @base64.encode(@utf8.encode(username + ":" + password)),
+  )
+}
+
+///|
+/// Returns a copy of the configuration with a merged header map, leaving
+/// `self` untouched.
+pub fn Config::with_headers(
+  self : Config,
+  headers : Map[String, String],
+) -> Config {
+  let merged = self.headers.copy()
+  for entry in headers {
+    let (key, value) = entry
+    merged[key] = value
+  }
+  { ..self, headers: merged, }
+}
+
+///|
+/// Returns a copy of the configuration with one extra header set.
+pub fn Config::with_header(
+  self : Config,
+  name : String,
+  value : String,
+) -> Config {
+  let headers = self.headers.copy()
+  headers[name] = value
+  { ..self, headers, }
+}
+
+///|
 /// Metadata attached to a collection or a record.
 ///
 /// Chroma only accepts scalar metadata values, which `MetadataValue`

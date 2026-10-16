@@ -7,6 +7,10 @@ import {
 }
 
 // Values
+pub const PEEK_LIMIT : Int = 100
+
+pub const TIMEOUT_HEADER : String = "x-chroma-timeout-ms"
+
 pub fn debug_collection_config(CollectionConfig) -> Json
 
 pub fn embedding_from_json(Json) -> Array[Double] raise ChromaError
@@ -21,11 +25,16 @@ pub fn metadata_from_json(Json) -> Array[(String, MetadataValue)]
 
 pub fn metadata_to_json(Array[(String, MetadataValue)]) -> Json
 
+pub fn validate_limit_offset(Int?, Int?) -> Unit raise ChromaError
+
+pub fn validate_n_results(Int) -> Unit raise ChromaError
+
 // Errors
 pub(all) suberror ChromaError {
   Transport(String)
   Status(Int, String)
   Decode(String)
+  InvalidArgument(String)
 }
 pub fn ChromaError::equal(Self, Self) -> Bool
 pub fn ChromaError::not_equal(Self, Self) -> Bool
@@ -39,6 +48,7 @@ pub(all) struct ChromaClient[T] {
 }
 pub fn[T : @http.Transport] ChromaClient::add(Self[T], String, Array[Record]) -> Unit raise ChromaError
 pub fn[T] ChromaClient::config(Self[T]) -> Config
+pub fn[T : @http.Transport] ChromaClient::count(Self[T], String) -> Int raise ChromaError
 pub fn[T : @http.Transport] ChromaClient::count_collections(Self[T]) -> Int raise ChromaError
 pub fn[T : @http.Transport] ChromaClient::create_collection(Self[T], String, config? : CollectionConfig) -> Collection raise ChromaError
 pub fn[T : @http.Transport] ChromaClient::delete(Self[T], String, filter? : Filter) -> Unit raise ChromaError
@@ -50,8 +60,9 @@ pub fn[T : @http.Transport] ChromaClient::heartbeat(Self[T]) -> Int raise Chroma
 pub fn[T : @http.Transport] ChromaClient::list_collections(Self[T]) -> Array[Collection] raise ChromaError
 pub fn[T : @http.Transport] ChromaClient::modify_collection(Self[T], String, new_name? : String?, metadata? : Array[(String, MetadataValue)]?) -> Unit raise ChromaError
 pub fn[T] ChromaClient::new(T, config? : Config) -> Self[T]
-pub fn[T : @http.Transport] ChromaClient::query_embeddings(Self[T], String, Array[Array[Double]], n_results? : Int, include_fields? : Include) -> QueryResult raise ChromaError
-pub fn[T : @http.Transport] ChromaClient::query_text(Self[T], String, Array[String], n_results? : Int, include_fields? : Include) -> QueryResult raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::peek(Self[T], String, limit? : Int, include_fields? : Include) -> QueryResult raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::query_embeddings(Self[T], String, Array[Array[Double]], n_results? : Int, include_fields? : Include, filter? : Filter) -> QueryResult raise ChromaError
+pub fn[T : @http.Transport] ChromaClient::query_text(Self[T], String, Array[String], n_results? : Int, include_fields? : Include, filter? : Filter) -> QueryResult raise ChromaError
 pub fn[T : @http.Transport] ChromaClient::update(Self[T], String, Array[Record], filter? : Filter) -> Unit raise ChromaError
 pub fn[T : @http.Transport] ChromaClient::upsert(Self[T], String, Array[Record]) -> Unit raise ChromaError
 pub fn[T : @http.Transport] ChromaClient::version(Self[T]) -> String raise ChromaError
@@ -77,6 +88,7 @@ pub(all) struct CollectionConfig {
 pub fn CollectionConfig::equal(Self, Self) -> Bool
 pub fn CollectionConfig::new(metadata? : Array[(String, MetadataValue)], embedding_function? : String?, configuration? : Json?) -> Self
 pub fn CollectionConfig::not_equal(Self, Self) -> Bool
+pub fn CollectionConfig::to_json(Self) -> Json
 pub fn CollectionConfig::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Config {
@@ -90,6 +102,10 @@ pub fn Config::equal(Self, Self) -> Bool
 pub fn Config::new(endpoint? : String, tenant? : String, database? : String, headers? : Map[String, String], timeout_ms? : Int) -> Self
 pub fn Config::not_equal(Self, Self) -> Bool
 pub fn Config::to_repr(Self) -> @debug.Repr
+pub fn Config::with_basic_auth(Self, String, String) -> Self
+pub fn Config::with_header(Self, String, String) -> Self
+pub fn Config::with_headers(Self, Map[String, String]) -> Self
+pub fn Config::with_token(Self, String) -> Self
 
 pub(all) struct Filter {
   where_clause : Json?
@@ -139,7 +155,7 @@ pub(all) struct QueryResult {
   distances : Array[Double?]
 } derive(Eq, @debug.Debug)
 pub fn QueryResult::equal(Self, Self) -> Bool
-pub fn QueryResult::from_json(Json) -> Self
+pub fn QueryResult::from_json(Json) -> Self raise ChromaError
 pub fn QueryResult::from_query_json(Json) -> Self
 pub fn QueryResult::not_equal(Self, Self) -> Bool
 pub fn QueryResult::to_repr(Self) -> @debug.Repr
@@ -149,6 +165,7 @@ pub(all) struct Record {
   document : String?
   embedding : Array[Double]?
   metadata : Array[(String, MetadataValue)]
+  embedding_function : Json?
 } derive(Eq, @debug.Debug)
 pub fn Record::equal(Self, Self) -> Bool
 pub fn Record::not_equal(Self, Self) -> Bool
@@ -156,6 +173,16 @@ pub fn Record::of_document(String, String, metadata? : Array[(String, MetadataVa
 pub fn Record::of_embedding(String, Array[Double], metadata? : Array[(String, MetadataValue)]) -> Self
 pub fn Record::to_json(Self) -> Json
 pub fn Record::to_repr(Self) -> @debug.Repr
+pub fn Record::with_embedding_function(Self, Json) -> Self raise ChromaError
+
+pub(all) struct TimeoutTransport[T] {
+  inner : T
+  timeout_ms : Int
+}
+pub fn[T] TimeoutTransport::from_config(T, Config) -> Self[T]
+pub fn[T] TimeoutTransport::new(T, Int) -> Self[T]
+pub fn[T : @http.Transport] TimeoutTransport::send(Self[T], @http.Request) -> @http.Response raise
+pub impl[T : @http.Transport] @http.Transport for TimeoutTransport[T]
 
 // Type aliases
 pub type Embedding = Array[Double]
