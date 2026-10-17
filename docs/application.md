@@ -1,0 +1,91 @@
+# chroma-client 项目申报书
+
+## 基本信息
+
+- 项目名称：chroma-client：MoonBit 的 Chroma 向量数据库客户端
+- 参赛者：**（待填写）**
+- 联系方式：**（待填写）**
+- GitHub 仓库链接：https://github.com/SundayT1998/moonbit-language-chroma-client
+- 项目方向：MoonBit 数据库客户端 / RAG 基础设施
+- 是否为移植项目：否，原创实现
+
+## 项目简介
+
+Chroma 是 RAG 流水线最常用的向量数据库之一，而 MoonBit 生态目前没有一个能
+直接连它的客户端：想落地检索增强应用，只能在 JS 运行时里跑官方 JS 客户端，
+或者用 FFI 包一层 Python/JS SDK。前者要背一个虚拟机，后者把跨语言数据校验的
+成本推给了每个调用方。
+
+`chroma-client` 是这个缺口的直接补位：纯 MoonBit 实现，直接说 Chroma 的
+**v2 HTTP API**，不依赖 JS 运行时、不依赖 FFI，`moon add` 之后就能建集合、
+写入向量、做相似度查询。使用者是准备用 MoonBit 写 RAG / 语义检索 / Agent
+工具链的库作者和应用开发者。它不追求把 Chroma 全量镜像过来，而是把数据面
+（collection、record、query）做扎实，把边界写在文档里。
+
+## 核心功能范围
+
+已交付（本仓库当前状态，均有测试与 CI 覆盖）：
+
+- Chroma v2 全部数据面端点：`heartbeat`、`version`、集合的增删改查与计数、
+  record 的 `add` / `update` / `upsert` / `delete` / `get`、`query_embeddings`，
+  另有 `peek`（limit 上限钳到 100，预览不会退化成全表扫）；
+- 同步 / 异步双 flavour：`Transport` 与 `AsyncTransport` 两个 trait，每个公开
+  方法都有 `xxx` 与 `xxx_async` 两个版本；库自带 `AsyncHttpTransport`
+  （基于 `moonbitlang/async/http`），也开放 trait 让宿主接自己的 HTTP 栈；
+- 可脚本化的 `MemoryTransport`：录制请求、按序回放响应，整个请求/响应回路
+  在普通 `moon test` 里跑完，不需要服务器；
+- 装饰型 transport：`RetryTransport`（只重试 429 与 5xx，逐次回调
+  `on_retry`，延迟以 `x-chroma-retry-delay-ms` 下发）、`TimeoutTransport`
+  （打 `x-chroma-timeout-ms`，不自己做阻塞 IO）；
+- 协议细节对齐：record 按 Chroma 的**列式** body 发送、`count` 解码裸整数、
+  `modify_collection` 用 `new_metadata`、`PUT` 路由要求 UUID（先按名字解析 id）；
+- 错误解码：非 2xx 统一解成 `ApiError`（status / error_code / message /
+  details / body），非 Chroma 错误体降级为 `Status`，响应体超过 32 MiB 报
+  `Decode` 而不是静默截断；
+- 本地参数校验：空批次、缺向量、`n_results <= 0`、`offset >= limit` 在发请求
+  之前就抛 `InvalidArgument`，省掉一次无意义的 400。
+
+后续计划（`docs/chroma-api-coverage.md` 中 Not covered 的部分，边界是明确的）：
+
+- `POST /collections/{id}/fork`：等新版本请求/响应形状稳定后跟进；
+- `POST /collections/{id}/reset`：破坏性操作，会以显式命名的方法交付；
+- `GET /collections/{id}/preflight`：本地校验已覆盖其主要用途；
+- 明确不做：tenant 管理、服务端 embedding（Chroma 1.x 已无服务端嵌入能力，
+  向量由调用方的嵌入模型产出）。
+
+## 预期验收产物
+
+- 可通过 `moon add SundayT1998/chroma-client` 引入的 MoonBit 库，覆盖上述
+  端点并同时提供同步 / 异步 API；
+- 覆盖率可验证：`scripts/ci.sh` 串起 fmt / check / `moon info` 接口漂移检查 /
+  test / coverage / `scripts/coverage_gate.sh` 核心路径覆盖率门禁（≥ 80%）/
+  debug + release 构建，全部以退出码说话；
+- 真实服务器联调：`scripts/integration.sh` 起 `chromadb/chroma` 容器跑通
+  全流程，CNB（dind service）与 GitHub Actions（service container）各有一条
+  integration job；
+- 双平台一致：`.cnb.yml` 与 `.github/workflows/ci.yml` 调用同一个
+  `scripts/ci.sh`，不存在两套检查；
+- 文档即边界：`docs/chroma-api-coverage.md` 逐端点列出 Covered / Not covered
+  与理由，`docs/serialization-perf.md` 用实测数据说明写路径不做流式序列化的
+  取舍，`docs/CONTRIBUTING.md` 写明两层测试与提交规范。
+
+## 移植或参考说明
+
+本项目为原创实现，不移植任何现有项目，许可证为 **Apache-2.0**（`LICENSE` 与
+`moon.mod` 的 `license` 一致）。
+
+Chroma 的 HTTP 协议定义来自其官方服务端
+（[chromadb/chroma](https://github.com/chromadb/chroma)，Apache-2.0），本仓库
+只按其公开的 v2 API 契约构造请求、解码响应，未复制其源码。协议细节以真实
+Chroma 服务器返回为准，`chroma_wbtest.mbt` 中针对列式 body、裸整数 count、
+`new_metadata` 与 `PUT` UUID 约束的测试都是被实际服务端纠正后才写下来的。
+
+## 与已有 MoonBit 包的关系
+
+目前 mooncakes.io 上没有与 Chroma 或向量数据库高度重合的 MoonBit 包；
+`chroma-client` 是 MoonBit 中第一个面向向量数据库的客户端库。生态里已有的是
+HTTP 与异步基础设施（`moonbitlang/async`），本项目复用而非重复实现。
+
+## 篇幅说明
+
+本文即申报正文，正文长度在一页 A4 以内；如需 PDF，可直接由本文件导出。

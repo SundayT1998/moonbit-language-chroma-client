@@ -17,6 +17,8 @@ The README is the entry point; everything longer lives in [`docs/`](docs/):
   v2 endpoints the client covers, which it deliberately does not, and why.
 - [`docs/serialization-perf.md`](docs/serialization-perf.md) — what a large
   record batch costs to serialize, and why the write path is not streamed.
+- [`docs/application.md`](docs/application.md) — the project application
+  (Chinese): scope that ships today, scope planned, and the license trail.
 
 ## Design
 
