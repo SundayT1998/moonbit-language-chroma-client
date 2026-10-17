@@ -1,0 +1,7 @@
+# The CI jobs run on Linux, macOS and Windows, and `scripts/ci.sh` fails when
+# `moon info` rewrites an interface in the worktree (see the `info` step).
+# Check out LF everywhere so `moon fmt` / `moon info` see the same bytes they
+# committed: with the default `core.autocrlf=true` on Windows, MoonBit reads a
+# CRLF copy of each file, regenerates `.mbti` without the CRs, and the job fails
+# on a diff nobody made.
+* text=auto eol=lf
