@@ -166,7 +166,14 @@ test "delete_collection builds a v2 urls for an encoded name" {
 ///|
 test "modify_collection sends only the fields it is given" {
   let transport = @chroma-client.MemoryTransport::new(responses=[
+    // Each name is resolved to an id with a `GET` before the `PUT`.
+    @chroma-client.Response::json(
+      200, "{\"id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"name\":\"docs\"}",
+    ),
     @chroma-client.Response::json(200, "{}"),
+    @chroma-client.Response::json(
+      200, "{\"id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"name\":\"docs\"}",
+    ),
     @chroma-client.Response::json(200, "{}"),
   ])
   let client = @chroma-client.ChromaClient::new(transport)
@@ -175,7 +182,9 @@ test "modify_collection sends only the fields it is given" {
   client.modify_collection("docs")
   let request = transport.last_request().unwrap()
   assert_eq(request.verb, @chroma-client.Put)
-  assert_true(request.url.has_suffix("/collections/docs"))
+  assert_true(
+    request.url.has_suffix("/collections/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+  )
   assert_eq(request.body.unwrap(), "{}")
   client.modify_collection(
     "docs",

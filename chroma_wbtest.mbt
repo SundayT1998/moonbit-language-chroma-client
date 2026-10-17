@@ -204,6 +204,76 @@ async test "get_collection returns None for a missing name" {
 }
 
 ///|
+async test "count_collections counts the collections in the database" {
+  guard chroma_endpoint() is Some(_) else { return }
+  let client = live_client()
+  let name = unique_name("count-collections")
+  defer (client.delete_collection_async(name) catch { _ => () })
+  // The endpoint answers with a bare integer and, unlike
+  // `collections/{id}/count`, over the whole database: create one collection
+  // and the count has to include it.
+  let before = client.count_collections_async()
+  ignore(client.get_or_create_collection_async(name))
+  assert_true(client.count_collections_async() > before)
+}
+
+///|
+async test "get_collection returns the collection just created" {
+  guard chroma_endpoint() is Some(_) else { return }
+  let client = live_client()
+  let name = unique_name("get")
+  defer (client.delete_collection_async(name) catch { _ => () })
+  let created = client.get_or_create_collection_async(name)
+  let fetched = client.get_collection_async(name).unwrap()
+  // The lookup goes through the same `/collections/{id}` endpoint the create
+  // response came from, so a wrong path would not find it.
+  assert_eq(fetched.id, created.id)
+  assert_eq(fetched.name, name)
+}
+
+///|
+async test "modify_collection renames and replaces metadata" {
+  guard chroma_endpoint() is Some(_) else { return }
+  let client = live_client()
+  let name = unique_name("modify")
+  let renamed = unique_name("modify-renamed")
+  defer (client.delete_collection_async(renamed) catch { _ => () })
+  ignore(
+    client.get_or_create_collection_async(
+      name,
+      config=CollectionConfig::new(metadata=[("keep", MString("yes"))]),
+    ),
+  )
+  // `new_metadata` is the field name the server actually reads; sending
+  // `metadata` is silently ignored, and nothing but a live server catches it.
+  client.modify_collection_async(
+    name,
+    new_name=Some(renamed),
+    metadata=Some([("topic", MString("changed"))]),
+  )
+  let modified = client.get_collection_async(renamed).unwrap()
+  assert_eq(modified.name, renamed)
+  assert_eq(modified.metadata, [("topic", MString("changed"))])
+}
+
+///|
+async test "peek returns at most the limit it was given" {
+  guard chroma_endpoint() is Some(_) else { return }
+  with_collection("peek", (client, collection) => {
+    client.add_async(collection.id, [
+      Record::of_embedding("a", [1.0, 0.0]),
+      Record::of_embedding("b", [0.0, 1.0]),
+      Record::of_embedding("c", [1.0, 1.0]),
+    ])
+    // `peek` posts to `/get` with a limit, so the server is what decides the
+    // page size: asking for 2 of the 3 records has to come back with 2.
+    let peeked = client.peek_async(collection.id, limit=2)
+    assert_eq(peeked.ids.length(), 2)
+    assert_eq(client.peek_async(collection.id, limit=99).ids.length(), 3)
+  })
+}
+
+///|
 async test "an error status carries the server's message" {
   guard chroma_endpoint() is Some(_) else { return }
   // A malformed id makes Chroma answer 400 with a JSON envelope; the client

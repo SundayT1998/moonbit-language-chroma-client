@@ -13,6 +13,7 @@ They are the same call over the same path, so the table lists them once.
 | Chroma endpoint | Client method(s) |
 | --- | --- |
 | `GET /heartbeat` | `heartbeat`, `heartbeat_async` |
+| `GET /version` | `version`, `version_async` |
 | `GET /collections` | `list_collections`, `list_collections_async` |
 | `POST /collections` | `create_collection`, `get_or_create_collection` (+ `_async`) |
 | `GET /collections/{id}` | `get_collection`, `get_collection_async` |
@@ -38,17 +39,28 @@ Body shapes matter here, and they are not what the older 0.x API used:
   envelope is accepted too;
 - `heartbeat` returns `{"nanosecond heartbeat": <int>}` and is surfaced as an
   `Int64`;
-- `modify_collection` sends `new_metadata`, not `metadata`.
+- `modify_collection` sends `new_metadata`, not `metadata`;
+- `PUT /collections/{id}` really wants a **UUID**, not a name — the `GET` and
+  `DELETE` routes below the same path accept either. `modify_collection` takes
+  a name like its neighbours, so it looks the id up first (a UUID argument
+  skips that round trip). Sending a name straight to `PUT` fails with
+  `400 InvalidArgumentError: Collection ID is not a valid UUIDv4`; only a live
+  server catches this, because a scripted response never validates the path.
 
 ## Not covered
+
+The entries below are deliberate gaps, not oversights: each one is either
+impossible to call correctly from this client or outside what a client for the
+data plane should do. "Not implemented" entries are candidates for a follow-up
+once the endpoint's wire shape settles; "out of scope" entries are not.
 
 | Chroma endpoint | Why not |
 | --- | --- |
 | `POST /query` with `query_texts` | Chroma 1.x has **no server-side embedding**; the server rejects documents it would have to embed (422), so a `query_text` method could never succeed. Vectors come from your own embedding model — see `Record::with_embedding`. |
-| `GET /version` | Not needed by the client; a caller who wants it can build the request with the exported `Request` / `Transport` types. |
 | Tenant endpoints (`GET`/`POST /tenants`) | Multi-tenant administration is out of scope; tenant and database are config, not client operations. |
-| `POST /collections/{id}/fork`, `/reset`, and other newer endpoints | Not implemented. They arrive with newer Chroma releases and are tracked as they stabilise. |
-| `GET /collections/{id}/preflight` | Not implemented; request validation is done locally instead (`validate_records` and friends). |
+| `POST /collections/{id}/fork` | Not implemented yet. It arrives with newer Chroma releases and is tracked here until the request/response shape stabilises. |
+| `POST /collections/{id}/reset` | Not implemented. It is destructive by design (it drops every record in a collection), so it would ship behind an explicitly named method rather than as the default way to empty a collection. |
+| `GET /collections/{id}/preflight` | Not implemented. The server uses it to price a query before running it; the client validates the same arguments locally (`validate_records`, `validate_n_results`, `validate_limit_offset`) and lets the server reject anything it missed. |
 
 ## Handled outside the endpoint list
 
@@ -77,13 +89,27 @@ Some behaviour is not an endpoint but still has to be right:
 ## Verifying coverage
 
 Claiming an endpoint is implemented is only half the story; the claim is
-backed by tests. `chroma_wbtest.mbt` exercises every covered endpoint above
-against a real server when `CHROMA_ENDPOINT` is set:
+backed by tests.
+
+`client_test.mbt` drives every covered method through `MemoryTransport`, which
+proves the request the client builds is the request the test expects. To see
+what the client actually sends, point a `MemoryTransport` at `ChromaClient`
+and inspect the recorded `Request`; that file is full of examples.
+
+`chroma_wbtest.mbt` additionally talks to a real server when `CHROMA_ENDPOINT`
+is set:
 
 ```bash
 sh scripts/integration.sh
 ```
 
-To see what the client actually sends, point a `MemoryTransport` at
-`ChromaClient` and inspect the recorded `Request` — `client_test.mbt` is full
-of examples.
+Its tests matter because scripted responses only prove the client agrees with
+itself — the columnar record body, the bare integer the count endpoints return
+and the `new_metadata` field on `modify_collection` were all found by a live
+server, not by the unit suite.
+
+Every covered method has a unit test, and the ones whose request shape the
+server can silently reject — the columnar record body, the bare-integer count,
+`new_metadata` on `modify_collection`, the `limit` on `peek` — also have a live
+test. Add a live test when a change touches the wire format; a scripted
+response cannot catch a field the server ignores.

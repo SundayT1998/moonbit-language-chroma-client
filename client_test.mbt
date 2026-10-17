@@ -502,6 +502,106 @@ test "count reads the collection record count" {
 }
 
 ///|
+test "modify_collection sends new_metadata and new_name" {
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    // A name is resolved to the collection's id first: the server's `PUT`
+    // route rejects a name with 400.
+    @chroma-client.Response::json(
+      200, "{\"id\":\"66666666-6666-4666-8666-666666666666\",\"name\":\"notes\"}",
+    ),
+    @chroma-client.Response::json(200, "{}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  let metadata : Array[(String, @chroma-client.MetadataValue)] = [
+    ("topic", @chroma-client.MString("ai")),
+  ]
+  ignore(
+    client.modify_collection(
+      "notes",
+      new_name=Some("renamed"),
+      metadata=Some(metadata),
+    ),
+  )
+  let request = transport.last_request().unwrap()
+  assert_eq(request.verb, Put)
+  assert_true(
+    request.url.has_suffix("/collections/66666666-6666-4666-8666-666666666666"),
+  )
+  // The server ignores a `metadata` field here, so the name of the field is
+  // the whole point of the test.
+  assert_eq(
+    @json.parse(request.body.unwrap()),
+    @json.parse(
+      "{\"new_name\":\"renamed\",\"new_metadata\":{\"topic\":\"ai\"}}",
+    ),
+  )
+}
+
+///|
+test "modify_collection omits the fields it is not given" {
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(
+      200, "{\"id\":\"77777777-7777-4777-8777-777777777777\",\"name\":\"notes\"}",
+    ),
+    @chroma-client.Response::json(200, "{}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  ignore(client.modify_collection("notes"))
+  assert_eq(
+    @json.parse(transport.last_request().unwrap().body.unwrap()),
+    @json.parse("{}"),
+  )
+}
+
+///|
+test "modify_collection percent-encodes the collection name it looks up" {
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(
+      200, "{\"id\":\"88888888-8888-4888-8888-888888888888\",\"name\":\"my notes\"}",
+    ),
+    @chroma-client.Response::json(200, "{}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  ignore(client.modify_collection("my notes", new_name=Some("x")))
+  let requests = transport.observed()
+  assert_true(requests[0].url.contains("my%20notes"))
+  assert_true(
+    requests[1].url.has_suffix(
+      "/collections/88888888-8888-4888-8888-888888888888",
+    ),
+  )
+}
+
+///|
+test "modify_collection uses an id as-is without a lookup" {
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(200, "{}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  ignore(client.modify_collection("99999999-9999-4999-8999-999999999999"))
+  assert_eq(transport.observed().length(), 1)
+  assert_true(
+    transport.last_request().unwrap().url.has_suffix(
+      "/collections/99999999-9999-4999-8999-999999999999",
+    ),
+  )
+}
+
+///|
+test "modify_collection rejects a name no collection has" {
+  let transport = @chroma-client.MemoryTransport::new(responses=[
+    @chroma-client.Response::json(404, "{\"error\":\"NotFound\"}"),
+  ])
+  let client = @chroma-client.ChromaClient::new(transport)
+  let result = try client.modify_collection("missing") catch {
+    error => error
+  } noraise {
+    _ => fail("expected an error for a missing collection")
+  }
+  assert_true(result is @chroma-client.InvalidArgument(_))
+}
+
+///|
 test "peek posts a bounded limit and decodes a flat result" {
   let transport = @chroma-client.MemoryTransport::new(responses=[
     @chroma-client.Response::json(
