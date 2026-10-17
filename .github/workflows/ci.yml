@@ -40,30 +40,15 @@ jobs:
         shell: bash
 
   # Runs the integration suite against a real Chroma server. Kept out of the
-  # `ci` job above for two reasons: the service container only works on Linux,
-  # and the default checks should not fail when the image cannot be pulled.
+  # `ci` job above for two reasons: the server needs a Docker daemon, and the
+  # default checks should not fail when the image cannot be pulled.
   #
-  # GitHub starts the service and the MoonBit tests connect to it over
-  # localhost; the same tests are driven by scripts/integration.sh on CNB,
-  # which starts the container itself.
+  # GitHub and CNB both go through scripts/integration.sh, which starts the
+  # container, waits for it and exports CHROMA_ENDPOINT; the tests themselves
+  # skip when that variable is unset.
   integration:
     name: integration (chroma)
     runs-on: ubuntu-latest
-    services:
-      chroma:
-        image: chromadb/chroma:latest
-        ports:
-          - 8000:8000
-        env:
-          CHROMA_SERVER_HOST: 0.0.0.0
-        # Without a health check the first request races the server's start-up
-        # and the suite fails with connection refused.
-        options: >-
-          --health-cmd "python -c \"import urllib.request;
-          urllib.request.urlopen('http://127.0.0.1:8000/api/v2/heartbeat')\""
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 24
     steps:
       - uses: actions/checkout@v4
 
@@ -85,11 +70,14 @@ jobs:
             echo "${HOME}/.moon/bin" >> "$GITHUB_PATH"
           fi
 
+      # Chroma used to be a `services:` sidecar, but GitHub reports "Service
+      # container chroma failed" without any log from the server, and the
+      # image's own health check is a python one-liner that a moving `latest`
+      # tag can invalidate. scripts/integration.sh starts the server itself —
+      # the same script the CNB pipeline runs — waits for /api/v2/heartbeat and
+      # prints the container logs when it does not come up.
       - name: Run integration tests
-        run: |
-          moon version --all
-          moon test --target native --deny-warn -p SundayT1998/chroma-client
+        run: sh scripts/integration.sh
         shell: bash
         env:
-          CHROMA_ENDPOINT: http://127.0.0.1:8000
           CHROMA_TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
