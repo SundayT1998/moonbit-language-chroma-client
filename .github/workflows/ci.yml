@@ -17,8 +17,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The toolchain comes from the install scripts on
+      # https://www.moonbitlang.com/download/ rather than from a setup action:
+      # moonbitlang/setup-moonbit no longer resolves, which failed every job
+      # before the first check ran. install/unix.sh covers Linux and macOS and
+      # installs into $HOME/.moon; install/powershell.ps1 covers Windows and
+      # only updates PATH for future processes, so the runner's own PATH is
+      # extended by hand in both branches.
       - name: Install MoonBit
-        uses: moonbitlang/setup-moonbit@main
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            powershell -NoProfile -Command "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser; irm https://cli.moonbitlang.com/install/powershell.ps1 | iex"
+            echo "${USERPROFILE}/.moon/bin" >> "$GITHUB_PATH"
+          else
+            curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+            echo "${HOME}/.moon/bin" >> "$GITHUB_PATH"
+          fi
 
       - name: Run CI
         run: sh scripts/ci.sh
@@ -52,11 +67,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The toolchain comes from the install scripts on
+      # https://www.moonbitlang.com/download/ rather than from a setup action:
+      # moonbitlang/setup-moonbit no longer resolves, which failed every job
+      # before the first check ran. install/unix.sh covers Linux and macOS and
+      # installs into $HOME/.moon; install/powershell.ps1 covers Windows and
+      # only updates PATH for future processes, so the runner's own PATH is
+      # extended by hand in both branches.
       - name: Install MoonBit
-        uses: moonbitlang/setup-moonbit@main
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            powershell -NoProfile -Command "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser; irm https://cli.moonbitlang.com/install/powershell.ps1 | iex"
+            echo "${USERPROFILE}/.moon/bin" >> "$GITHUB_PATH"
+          else
+            curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+            echo "${HOME}/.moon/bin" >> "$GITHUB_PATH"
+          fi
 
       - name: Run integration tests
-        run: moon test --target native --deny-warn -p SundayT1998/chroma-client
+        run: |
+          moon version --all
+          moon test --target native --deny-warn -p SundayT1998/chroma-client
         shell: bash
         env:
           CHROMA_ENDPOINT: http://127.0.0.1:8000

@@ -6,13 +6,30 @@ and what the code is expected to look like.
 
 ## Getting set up
 
-You need the [MoonBit toolchain](https://docs.moonbitlang.com) and nothing
-else — no Chroma server, no Docker:
+You need the [MoonBit toolchain](https://www.moonbitlang.com/download/) and
+nothing else — no Chroma server, no Docker. Install it with the official
+script for your system:
+
+```bash
+# Linux & macOS
+curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+export PATH="$HOME/.moon/bin:$PATH"
+```
+
+```powershell
+# Windows, in PowerShell
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser; irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+```
+
+Then check what you got and refresh the dependency index:
 
 ```bash
 moon version --all      # the module is developed against 0.1.20261012
 moon update
 ```
+
+CI installs the toolchain the same way (`.github/workflows/ci.yml`); CNB bakes
+it into `.cnb/Dockerfile`.
 
 The module declares `preferred_target = "wasm"`, but `native` is the target CI
 uses for tests (the async transport needs a runtime that supports
