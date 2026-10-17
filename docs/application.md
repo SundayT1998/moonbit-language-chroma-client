@@ -3,8 +3,8 @@
 ## 基本信息
 
 - 项目名称：chroma-client：MoonBit 的 Chroma 向量数据库客户端
-- 参赛者：**（待填写）**
-- 联系方式：**（待填写）**
+- 参赛者：糖怎么睡不着啊
+- 联系方式：https://github.com/SundayT1998
 - GitHub 仓库链接：https://github.com/SundayT1998/moonbit-language-chroma-client
 - 项目方向：MoonBit 数据库客户端 / RAG 基础设施
 - 是否为移植项目：否，原创实现
@@ -23,8 +23,6 @@ Chroma 是 RAG 流水线最常用的向量数据库之一，而 MoonBit 生态�
 （collection、record、query）做扎实，把边界写在文档里。
 
 ## 核心功能范围
-
-已交付（本仓库当前状态，均有测试与 CI 覆盖）：
 
 - Chroma v2 全部数据面端点：`heartbeat`、`version`、集合的增删改查与计数、
   record 的 `add` / `update` / `upsert` / `delete` / `get`、`query_embeddings`，
@@ -79,13 +77,3 @@ Chroma 的 HTTP 协议定义来自其官方服务端
 只按其公开的 v2 API 契约构造请求、解码响应，未复制其源码。协议细节以真实
 Chroma 服务器返回为准，`chroma_wbtest.mbt` 中针对列式 body、裸整数 count、
 `new_metadata` 与 `PUT` UUID 约束的测试都是被实际服务端纠正后才写下来的。
-
-## 与已有 MoonBit 包的关系
-
-目前 mooncakes.io 上没有与 Chroma 或向量数据库高度重合的 MoonBit 包；
-`chroma-client` 是 MoonBit 中第一个面向向量数据库的客户端库。生态里已有的是
-HTTP 与异步基础设施（`moonbitlang/async`），本项目复用而非重复实现。
-
-## 篇幅说明
-
-本文即申报正文，正文长度在一页 A4 以内；如需 PDF，可直接由本文件导出。
